@@ -1,638 +1,465 @@
-# Career Gap Mapper — Streamlit (single file)
-# Domains: Data/Software, Medicine, Business/Entrepreneur, Sports (Athlete), plus more roles
-# Features: Resume keyword scan, self-assessment, gap radar, 12-week roadmap, resources, tracker, export, coach bot.
-
+import io
+import os
 import re
-from textwrap import dedent
-from datetime import date
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
+import math
+import base64
+import textwrap
+from datetime import datetime, timedelta
+
 import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Career Gap Mapper", page_icon="🧭", layout="wide")
+from rapidfuzz import fuzz, process
+import docx2txt
+from PyPDF2 import PdfReader
 
-# ---------------------- Utilities ----------------------
-def norm(x, a=0, b=5):
+import spacy
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+
+# ------------------------------
+# Init / Config
+# ------------------------------
+st.set_page_config(page_title="Career Gap Mapper (Universal)", page_icon="🧭", layout="wide")
+st.title("🧭 Career Gap Mapper — Universal")
+st.caption("Upload your resume, paste a target role/JD, and get a personalized gap map, recommendations, and a learning roadmap.")
+
+@st.cache_resource(show_spinner=False)
+def load_nlp():
     try:
-        x = float(x)
+        return spacy.load("en_core_web_sm")
     except Exception:
-        return 0.0
-    return float(np.clip(x, a, b))
+        return None
 
-def radar_chart(categories, current, target):
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(r=current + [current[0]],
-                                  theta=categories + [categories[0]],
-                                  fill='toself', name='You (now)'))
-    fig.add_trace(go.Scatterpolar(r=target + [target[0]],
-                                  theta=categories + [categories[0]],
-                                  name='Target'))
-    fig.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 5])),
-        showlegend=True, height=430, margin=dict(l=30, r=30, t=40, b=10)
-    )
-    return fig
+nlp = load_nlp()
 
-def parse_resume(text, skill_keywords):
-    """Very simple keyword counter -> returns rough (0..5) estimates per skill."""
-    text_low = text.lower()
-    scores = {}
-    for skill, kws in skill_keywords.items():
-        hits = 0
-        for kw in kws:
-            hits += len(re.findall(rf"\b{re.escape(kw.lower())}\b", text_low))
-        # Map hits to 0..5 nonlinearly
-        if hits == 0: s = 0
-        elif hits == 1: s = 2
-        elif hits <= 3: s = 3
-        elif hits <= 6: s = 4
-        else: s = 5
-        scores[skill] = s
-    return scores
-
-def make_12_week_plan(gaps_sorted, hours_per_week):
-    """Distribute top gaps into 12 weeks. Heavier gaps get more hours."""
-    if not gaps_sorted:
-        return []
-    base_hours = max(2, int(hours_per_week))
-    weights = np.array([g['gap'] for g in gaps_sorted], dtype=float)
-    if weights.sum() == 0:
-        weights = np.ones_like(weights)
-    weights = weights / weights.sum()
-    weekly_alloc = (weights * base_hours).clip(min=1.0)
-    weeks = list(range(1, 13))
-    plan = []
-    for w in weeks:
-        tasks = []
-        for i, g in enumerate(gaps_sorted):
-            hrs = weekly_alloc[i]
-            verb = {
-                "Theory": "Read/notes",
-                "Coding": "Code drills",
-                "Tactics": "Drills",
-                "Endurance": "Train",
-                "Strength": "Gym",
-                "Communication": "Practice",
-                "Leadership": "Lead",
-                "Research": "Review papers",
-                "Clinical": "Shadow/OSCE",
-                "Business": "Prototype",
-                "Security": "Lab"
-            }
-            v = None
-            for k in verb:
-                if k.lower() in g["skill"].lower():
-                    v = verb[k]
-                    break
-            if v is None:
-                v = "Practice"
-            tasks.append({
-                "skill": g["skill"],
-                "focus": f"{v}: {g['recommendation']}",
-                "hours": float(np.round(hrs, 1))
-            })
-        plan.append({"week": w, "tasks": tasks})
-    return plan
-
-def export_markdown(profile, gaps, plan, resources):
-    md = [f"# Career Gap Report — {date.today().isoformat()}",
-          f"**Domain/Role:** {profile['name']}  ",
-          f"**Hours/Week Planned:** {profile['hours_per_week']}  ",
-          ""]
-    md.append("## Gap Summary")
-    if not gaps:
-        md.append("_No significant gaps detected. Great job!_")
-    else:
-        md.append("| Skill | You | Target | Gap | Priority | Recommendation |")
-        md.append("|---|---:|---:|---:|---:|---|")
-        for g in gaps:
-            md.append(f"| {g['skill']} | {g['current']:.1f} | {g['target']:.1f} | "
-                      f"{g['gap']:.1f} | {g['priority']} | {g['recommendation']} |")
-    md.append("")
-    md.append("## 12-Week Roadmap")
-    for wk in plan:
-        md.append(f"### Week {wk['week']}")
-        for t in wk["tasks"]:
-            md.append(f"- **{t['skill']}** — {t['focus']} _(~{t['hours']} h)_")
-    md.append("")
-    md.append("## Resources")
-    for cat, links in resources.items():
-        md.append(f"### {cat}")
-        for title, url in links:
-            md.append(f"- [{title}]({url})")
-    return "\n".join(md)
-
-# ---------------------- Domain Library ----------------------
-ROLE_LIBRARY = {
-    # Existing roles
-    "Data Science (Entry)":
-    {
+# ------------------------------
+# Domain Skill Ontology (editable)
+# Each skill has optional weight (importance) 1–5 and tags
+# ------------------------------
+ONTOLOGY = {
+    "Technology / Data": {
         "skills": {
-            "Python": 4.0, "Statistics": 4.0, "ML Fundamentals": 4.0,
-            "Data Wrangling (Pandas/SQL)": 4.0, "Visualization": 3.5,
-            "MLOps/Basics": 2.5, "Communication": 3.5, "Projects/Portfolio": 4.0
-        },
-        "keywords": {
-            "Python": ["python", "numpy", "pandas", "scikit-learn"],
-            "Statistics": ["probability", "hypothesis test", "p-value", "anova"],
-            "ML Fundamentals": ["regression", "classification", "clustering", "random forest", "xgboost"],
-            "Data Wrangling (Pandas/SQL)": ["sql", "joins", "pandas", "etl"],
-            "Visualization": ["matplotlib", "seaborn", "plotly", "dashboard"],
-            "MLOps/Basics": ["mlops", "docker", "pipeline", "deployment"],
-            "Communication": ["presented", "stakeholder", "storytelling"],
-            "Projects/Portfolio": ["github", "kaggle", "project", "case study"]
-        },
-        "resources": {
-            "Core": [
-                ("Python for Data Analysis (book)", "https://wesmckinney.com/book/"),
-                ("scikit-learn docs", "https://scikit-learn.org/stable/"),
-            ],
-            "Practice": [
-                ("Kaggle", "https://www.kaggle.com/"),
-                ("UCI ML Repository", "https://archive.ics.uci.edu/"),
-            ],
-            "MLOps": [
-                ("Made With ML", "https://madewithml.com/"),
-            ],
+            "python": 5, "java": 4, "c++": 4, "javascript": 4, "react": 3, "node.js": 3,
+            "sql": 5, "data modeling": 4, "machine learning": 5, "deep learning": 4,
+            "nlp": 4, "computer vision": 4, "tensorflow": 3, "pytorch": 3,
+            "cloud": 4, "aws": 4, "azure": 4, "gcp": 4,
+            "docker": 3, "kubernetes": 3, "git": 3, "linux": 3,
+            "data visualization": 4, "tableau": 3, "power bi": 3,
+            "communication": 4, "problem solving": 4, "agile": 3
         }
     },
-
-    "Software Engineering (Entry)":
-    {
+    "Business / Management": {
         "skills": {
-            "CS Fundamentals": 4.0, "Data Structures": 4.0, "Algorithms": 4.0,
-            "Backend / APIs": 3.5, "Frontend Basics": 3.0,
-            "Testing": 3.0, "DevOps Basics": 2.5, "Communication": 3.5
-        },
-        "keywords": {
-            "CS Fundamentals": ["os", "networks", "database", "oop"],
-            "Data Structures": ["array", "hash", "tree", "graph", "stack", "queue"],
-            "Algorithms": ["complexity", "greedy", "dp", "two pointers"],
-            "Backend / APIs": ["api", "rest", "node", "django", "flask", "spring"],
-            "Frontend Basics": ["html", "css", "react", "vue"],
-            "Testing": ["unit test", "pytest", "jest", "ci"],
-            "DevOps Basics": ["docker", "git", "ci/cd"],
-            "Communication": ["stakeholder", "cross-functional"]
-        },
-        "resources": {
-            "Core": [
-                ("LeetCode", "https://leetcode.com/"),
-                ("CS50", "https://cs50.harvard.edu/"),
-            ],
-            "Backend": [
-                ("FastAPI docs", "https://fastapi.tiangolo.com/"),
-            ],
-            "Frontend": [
-                ("React docs", "https://react.dev/"),
-            ]
+            "financial analysis": 5, "excel": 4, "sql": 3, "power bi": 3, "tableau": 3,
+            "market research": 4, "product management": 5, "pricing": 4,
+            "strategic planning": 5, "stakeholder management": 4,
+            "presentation": 4, "negotiation": 4, "communication": 5, "project management": 5
         }
     },
-
-    "Medicine (Student/Resident)":
-    {
+    "Medical / Healthcare": {
         "skills": {
-            "Anatomy/Physiology": 4.0, "Clinical Reasoning": 4.0, "Diagnostics": 3.5,
-            "Procedures/OSCE": 3.5, "Research/Literature": 3.0,
-            "Communication & Empathy": 4.0, "Ethics/Compliance": 4.0
-        },
-        "keywords": {
-            "Anatomy/Physiology": ["anatomy", "physiology", "pathology"],
-            "Clinical Reasoning": ["differential", "management", "protocol"],
-            "Diagnostics": ["ecg", "imaging", "labs"],
-            "Procedures/OSCE": ["osce", "procedures", "simulation"],
-            "Research/Literature": ["pubmed", "cohort", "randomized", "systematic review"],
-            "Communication & Empathy": ["counsel", "patient education"],
-            "Ethics/Compliance": ["hipaa", "ethics", "consent"]
-        },
-        "resources": {
-            "Core": [
-                ("AMBOSS (trial)", "https://www.amboss.com/"),
-                ("PubMed", "https://pubmed.ncbi.nlm.nih.gov/")
-            ],
-            "Skills": [
-                ("NEJM — Procedures", "https://www.nejm.org/medical-videos")
-            ],
+            "patient assessment": 5, "clinical documentation": 5, "diagnostics": 5,
+            "pharmacology": 4, "infection control": 5, "emr/ehr": 4, "telemedicine": 3,
+            "basic life support": 5, "advanced cardiac life support": 5,
+            "bedside manner": 4, "triage": 4, "medical research": 3,
+            "teamwork": 4, "communication": 5, "ethics": 5
         }
     },
-
-    "Business / Entrepreneur":
-    {
+    "Sports / Performance": {
         "skills": {
-            "Opportunity Sizing": 4.0, "Customer Discovery": 4.0, "MVP/Prototyping": 4.0,
-            "Go-to-Market": 3.5, "Finance & Unit Economics": 4.0,
-            "Leadership & Hiring": 3.5, "Pitch & Story": 4.0
-        },
-        "keywords": {
-            "Opportunity Sizing": ["tam", "sam", "som", "market"],
-            "Customer Discovery": ["interviews", "personas", "jobs-to-be-done"],
-            "MVP/Prototyping": ["prototype", "mvp", "no-code"],
-            "Go-to-Market": ["pricing", "channels", "growth"],
-            "Finance & Unit Economics": ["cac", "ltv", "margin", "cohort"],
-            "Leadership & Hiring": ["hiring", "org", "team"],
-            "Pitch & Story": ["pitch", "deck", "storytelling"]
-        },
-        "resources": {
-            "Core": [
-                ("YC Startup School", "https://www.startupschool.org/"),
-                ("Lean Startup (summary)", "https://en.wikipedia.org/wiki/Lean_startup")
-            ],
-            "Finance": [
-                ("Unit economics explainer", "https://a16z.com/2015/09/22/16-metrics/"),
-            ],
+            "strength conditioning": 5, "endurance training": 5, "agility": 4,
+            "injury prevention": 5, "sports nutrition": 4, "recovery protocols": 5,
+            "tactical awareness": 4, "video analysis": 3,
+            "mental resilience": 5, "teamwork": 5, "leadership": 4, "communication": 4,
+            "performance analytics": 4, "gps tracking": 3
         }
     },
-
-    "Sports (Athlete)":
-    {
+    "Design / Creative": {
         "skills": {
-            "Technique/Tactics": 4.0, "Strength": 4.0, "Endurance": 4.0,
-            "Mobility/Recovery": 3.5, "Nutrition": 3.5, "Mindset/Focus": 4.0
-        },
-        "keywords": {
-            "Technique/Tactics": ["tactics", "drills", "coach"],
-            "Strength": ["strength", "weights", "gym"],
-            "Endurance": ["endurance", "intervals", "aerobic"],
-            "Mobility/Recovery": ["mobility", "physio", "recovery"],
-            "Nutrition": ["nutrition", "diet", "macros"],
-            "Mindset/Focus": ["mindset", "visualization", "routine"]
-        },
-        "resources": {
-            "Core": [
-                ("Science of Ultra", "https://www.scienceofultra.com/"),
-                ("Stronger by Science", "https://www.strongerbyscience.com/")
-            ],
-            "Recovery": [
-                ("The Ready State (blog)", "https://thereadystate.com/blog/")
-            ]
+            "ui design": 5, "ux research": 5, "wireframing": 4, "prototyping": 4,
+            "figma": 4, "adobe xd": 3, "illustrator": 3, "photoshop": 3,
+            "interaction design": 4, "accessibility": 5, "visual hierarchy": 4,
+            "design systems": 4, "motion design": 3, "communication": 4, "portfolio storytelling": 5
         }
     },
-
-    # ---------------- New roles below ----------------
-    "Full-stack Software Engineer":
-    {
+    "Education / Teaching": {
         "skills": {
-            "Frontend (React/SPA)": 4.0, "Backend (API/DB)": 4.0, "System Design": 3.5,
-            "Testing/QA": 3.5, "DevOps/Cloud": 3.5, "Security Basics": 3.0,
-            "Product Sense": 3.0, "Communication": 3.5
-        },
-        "keywords": {
-            "Frontend (React/SPA)": ["react", "redux", "spa", "typescript"],
-            "Backend (API/DB)": ["rest", "graphql", "postgres", "mysql", "django", "node", "spring"],
-            "System Design": ["scalability", "load balancer", "cache", "queue", "microservices"],
-            "Testing/QA": ["unit test", "integration test", "jest", "pytest", "cypress"],
-            "DevOps/Cloud": ["docker", "kubernetes", "aws", "gcp", "ci/cd"],
-            "Security Basics": ["owasp", "auth", "jwt", "cors"],
-            "Product Sense": ["a/b test", "analytics", "kpi"],
-            "Communication": ["stakeholder", "design doc", "rfc"]
-        },
-        "resources": {
-            "Core": [
-                ("System Design Primer", "https://github.com/donnemartin/system-design-primer"),
-                ("React docs", "https://react.dev/")
-            ],
-            "Backend": [
-                ("FastAPI docs", "https://fastapi.tiangolo.com/")
-            ],
-            "DevOps": [
-                ("Docker docs", "https://docs.docker.com/")
-            ]
+            "lesson planning": 5, "classroom management": 5, "assessment design": 5,
+            "differentiated instruction": 5, "edtech tools": 4, "lms": 4,
+            "student engagement": 5, "communication": 5, "parent liaison": 4,
+            "curriculum design": 5, "research methods": 3
         }
-    },
-
-    "Product Manager":
-    {
-        "skills": {
-            "User Research": 4.0, "Prioritization/Strategy": 4.0, "Roadmapping": 3.5,
-            "Data & Experimentation": 3.5, "Spec Writing": 4.0, "Stakeholder Mgmt": 4.0,
-            "GTM/Launch": 3.5, "Leadership": 3.5
-        },
-        "keywords": {
-            "User Research": ["interviews", "personas", "journey map"],
-            "Prioritization/Strategy": ["r Ice", "ranks", "strategy", "vision", "okr"],
-            "Roadmapping": ["roadmap", "quarter", "milestone"],
-            "Data & Experimentation": ["a/b test", "cohort", "sql", "ga4", "mixpanel"],
-            "Spec Writing": ["prd", "requirements", "acceptance criteria"],
-            "Stakeholder Mgmt": ["alignment", "stakeholder", "review"],
-            "GTM/Launch": ["launch", "messaging", "pricing"],
-            "Leadership": ["influence", "cross-functional"]
-        },
-        "resources": {
-            "Core": [
-                ("SVPG Articles", "https://www.svpg.com/articles/"),
-                ("Reforge Essays", "https://www.reforge.com/blog")
-            ],
-            "Data": [
-                ("Experimentation guide", "https://www.optimizely.com/optimization-glossary/ab-testing/")
-            ]
-        }
-    },
-
-    "Cybersecurity Analyst (Blue Team)":
-    {
-        "skills": {
-            "Security Fundamentals": 4.0, "SIEM/Monitoring": 4.0, "Incident Response": 4.0,
-            "Threat Intel": 3.5, "Network/Endpoint": 3.5, "Scripting/Automation": 3.0,
-            "Reporting/Comms": 3.5
-        },
-        "keywords": {
-            "Security Fundamentals": ["cissp", "security+", "cia triad", "nist"],
-            "SIEM/Monitoring": ["siem", "splunk", "elk", "alerts", "detection"],
-            "Incident Response": ["ir", "triage", "containment", "forensics"],
-            "Threat Intel": ["mitre att&ck", "ioc", "tactics", "ttp"],
-            "Network/Endpoint": ["ids", "ips", "edr", "wireshark", "pcap"],
-            "Scripting/Automation": ["python", "bash", "automation"],
-            "Reporting/Comms": ["postmortem", "rca", "stakeholder"]
-        },
-        "resources": {
-            "Core": [
-                ("MITRE ATT&CK", "https://attack.mitre.org/"),
-                ("Blue Team Handbook (ref)", "https://www.blueteamhandbook.com/")
-            ],
-            "Labs": [
-                ("TryHackMe (Blue)", "https://tryhackme.com/"),
-            ]
-        }
-    },
-
-    "Cardiology Resident":
-    {
-        "skills": {
-            "Cardiac Physiology": 4.0, "ECG/Imaging": 4.0, "Clinical Reasoning": 4.0,
-            "Procedures": 3.5, "Guidelines & Evidence": 4.0, "Research/Lit": 3.0,
-            "Communication/Empathy": 4.0
-        },
-        "keywords": {
-            "Cardiac Physiology": ["cardiac output", "preload", "afterload"],
-            "ECG/Imaging": ["ecg", "echo", "stress test", "angiography"],
-            "Clinical Reasoning": ["acs", "heart failure", "arrhythmia"],
-            "Procedures": ["catheter", "pacing", "cardioversion"],
-            "Guidelines & Evidence": ["acc/aha", "esc", "guideline"],
-            "Research/Lit": ["pubmed", "cohort", "trial"],
-            "Communication/Empathy": ["counsel", "risk discussion"]
-        },
-        "resources": {
-            "Core": [
-                ("ACC/AHA Guidelines", "https://www.acc.org/Guidelines"),
-                ("ESC Guidelines", "https://www.escardio.org/Guidelines")
-            ],
-            "ECG": [
-                ("Life in the Fast Lane ECG Library", "https://litfl.com/ecg-library/")
-            ]
-        }
-    },
-
-    "Sports Physiotherapist":
-    {
-        "skills": {
-            "Assessment/Screening": 4.0, "Diagnosis & Planning": 4.0,
-            "Manual Therapy": 3.5, "Rehab Programming": 4.0,
-            "Return-to-Play": 4.0, "Load Management": 3.5, "Communication": 4.0
-        },
-        "keywords": {
-            "Assessment/Screening": ["fms", "screen", "aslr", "hop test"],
-            "Diagnosis & Planning": ["dx", "plan", "soap", "goal"],
-            "Manual Therapy": ["soft tissue", "mobilization"],
-            "Rehab Programming": ["eccentric", "isometric", "protocol"],
-            "Return-to-Play": ["rtp", "criteria", "functional"],
-            "Load Management": ["acute:chronic", "rpe", "gps"],
-            "Communication": ["coach", "athlete", "stakeholder"]
-        },
-        "resources": {
-            "Core": [
-                ("BJSM Blog", "https://blogs.bmj.com/bjsm/"),
-                ("Clinical practice guidelines (PT)", "https://www.apta.org/patient-care/evidence-based-practice-resources")
-            ],
-            "Programming": [
-                ("ExRx", "https://exrx.net/")
-            ]
-        }
-    },
+    }
 }
 
-# ---------------------- Sidebar (Navigation) ----------------------
-st.sidebar.title("🧭 Career Gap Mapper")
-page = st.sidebar.radio("Go to", ["Home", "Assess", "Roadmap", "Resources", "Tracker", "Coach Bot"])
+# Map of generic recs per skill root token
+RECS = {
+    # generic across domains
+    "communication": ["Toastmasters practice plan", "Teach-back method sessions", "Weekly presentation challenge"],
+    "project management": ["PMI CAPM prep", "2-week Scrum simulation", "Jira basics live practice"],
+    "sql": ["Kaggle SQL micro-courses", "Mode Analytics SQL Tutorial", "Build a warehouse demo"],
+    "python": ["Automate the Boring Stuff", "30-day Python scripting plan", "DataCamp intro track"],
+    "data visualization": ["Makeover Monday (Tableau)", "Storytelling with Data drills"],
+    "patient assessment": ["OSCE-style mock scenarios", "Shadow a clinician 2x/week"],
+    "injury prevention": ["Prehab routine template", "Sports physio workshop"],
+    "ui design": ["Daily UI challenge (30 days)", "Design Systems crash course"],
+    "lesson planning": ["Backward design templates", "Universal Design for Learning (UDL)"]
+}
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Your data stays in your browser session. No upload to servers.")
+# Domain-specific project ideas (portfolio-friendly)
+PROJECTS = {
+    "Technology / Data": [
+        "End-to-end churn prediction with SHAP explanations",
+        "MLOps-lite pipeline: data → train → deploy (FastAPI + Docker)"
+    ],
+    "Business / Management": [
+        "Market sizing + pricing strategy deck from public data",
+        "KPI dashboard (profitability, retention, CAC/LTV) with a simulated dataset"
+    ],
+    "Medical / Healthcare": [
+        "Build a triage decision-support mock app using guidelines",
+        "Analyze synthetic EMR data for infection control trends"
+    ],
+    "Sports / Performance": [
+        "GPS/accelerometer session analyzer with load management",
+        "Video breakdown tool for tactical events (open-source footage)"
+    ],
+    "Design / Creative": [
+        "Accessible design system (WCAG AA) with tokens + Figma kit",
+        "UX research case study: recruit, test, synthesize, prototype"
+    ],
+    "Education / Teaching": [
+        "Micro-MOOC with interactive quizzes + analytics",
+        "Adaptive learning prototype using item-response theory (IRT)"
+    ]
+}
 
-# Persist user selections
-if "state" not in st.session_state:
-    st.session_state.state = {
-        "role": "Data Science (Entry)",
-        "hours_per_week": 6,
-        "resume_text": "",
-        "self_scores": {},   # per skill 0..5
-        "gaps": [],
-        "plan": []
-    }
+def normalize(s: str) -> str:
+    return re.sub(r"[^a-z0-9+.# ]", " ", s.lower()).replace("  ", " ").strip()
 
-S = st.session_state.state
+def read_resume(file) -> str:
+    name = file.name.lower()
+    if name.endswith(".pdf"):
+        reader = PdfReader(file)
+        text = ""
+        for p in reader.pages:
+            t = p.extract_text() or ""
+            text += "\n" + t
+        return text
+    elif name.endswith(".docx"):
+        # need saved temp file for docx2txt
+        tmp = f"/tmp/{name}"
+        with open(tmp, "wb") as f:
+            f.write(file.getbuffer())
+        return docx2txt.process(tmp) or ""
+    elif name.endswith(".txt"):
+        return file.read().decode("utf-8", errors="ignore")
+    else:
+        return ""
 
-# ---------------------- Home ----------------------
-if page == "Home":
-    st.markdown("## 🌟 Map your gap. Build your plan.")
-    st.write(dedent("""
-    Welcome to **Career Gap Mapper** — a simple, structured way to see where you stand
-    and build a focused 12-week plan to reach your next role or performance level.
-    """))
+def keyword_skillset():
+    # Build a unique canon list of skills across all domains
+    bag = set()
+    weights = {}
+    for dom, cfg in ONTOLOGY.items():
+        for sk, w in cfg["skills"].items():
+            bag.add(sk)
+            weights[sk] = max(weights.get(sk, 0), w)
+    return sorted(bag), weights
 
-    col1, col2 = st.columns([1,1])
-    with col1:
-        st.selectbox("Choose a domain/role", list(ROLE_LIBRARY.keys()),
-                     index=list(ROLE_LIBRARY.keys()).index(S["role"]), key="role_home")
-    with col2:
-        S["hours_per_week"] = st.slider("Hours you can invest each week", 2, 30, S["hours_per_week"], 1)
+ALL_SKILLS, GLOBAL_WEIGHTS = keyword_skillset()
 
-    S["role"] = st.session_state.get("role_home", S["role"])
-    role = ROLE_LIBRARY[S["role"]]
-    st.info(f"**Selected Role:** {S['role']}  \n"
-            f"Target skill levels shown on the next page. You can paste your resume to auto-estimate current levels and then refine with sliders.")
+def extract_skills_freeform(text: str, top_n=80, cutoff=80):
+    """
+    Fuzzy match chunks in resume/JD against our global skill dictionary.
+    Returns unique canonical skills.
+    """
+    text_norm = normalize(text)
+    tokens = set(re.split(r"[\s,/;|()\[\]-]+", text_norm))
+    # generate candidate n-grams up to 3
+    grams = set(tokens)
+    words = text_norm.split()
+    for n in [2, 3]:
+        grams.update(" ".join(words[i:i+n]) for i in range(len(words)-n+1))
+    grams = [g for g in grams if 2 <= len(g) <= 40]
 
-    st.markdown("### What you’ll do")
-    st.markdown("""
-    1. **Assess** – Let the app read your resume (optional) and self-rate your skills.
-    2. **Roadmap** – Get a 12-week plan that allocates your weekly hours to the biggest gaps.
-    3. **Resources** – Explore curated links matched to your gaps.
-    4. **Tracker** – Mark tasks done each week and keep going!
-    """)
+    matches = process.extract(
+        grams, ALL_SKILLS, scorer=fuzz.WRatio, limit=top_n
+    )
+    picked = []
+    for cand, score, canon in matches:
+        if score >= cutoff:
+            picked.append(canon)
+    return sorted(set(picked))
 
-# ---------------------- Assess ----------------------
-if page == "Assess":
-    st.header("🧪 Assess your current level")
-    role = ROLE_LIBRARY[S["role"]]
-    targets = role["skills"]
-    skills = list(targets.keys())
+def weight_for(skill: str, domain: str) -> int:
+    if domain in ONTOLOGY and skill in ONTOLOGY[domain]["skills"]:
+        return ONTOLOGY[domain]["skills"][skill]
+    return GLOBAL_WEIGHTS.get(skill, 3)
 
-    st.subheader("1) Optional: paste your resume / profile")
-    S["resume_text"] = st.text_area("Paste text (resume, profile, bio, achievements)…",
-                                    value=S["resume_text"], height=180,
-                                    placeholder="Paste here to auto-estimate skill levels")
+def suggest_recs(skill: str, domain: str):
+    out = []
+    # domain flavored recs
+    if domain in PROJECTS:
+        # add generic but keep domain-specific via project list separately
+        pass
+    # generic recs by root token
+    root = skill.split()[0]
+    out += RECS.get(skill, []) + RECS.get(root, [])
+    # fallbacks
+    if not out:
+        out = [f"Find a mentor-guided micro-project focusing on **{skill}**",
+               f"1-page brief + demo artifact for **{skill}**",
+               f"Daily 20-min drills for **{skill}** (4 weeks)"]
+    return list(dict.fromkeys(out))[:3]
 
-    auto_scores = {}
-    if st.button("🔍 Auto-estimate from text"):
-        auto_scores = parse_resume(S["resume_text"], role["keywords"])
-        st.success("Estimated from text. You can fine-tune with sliders below.")
-        S["self_scores"].update(auto_scores)
+def roadmap(missing_list, weeks=8, domain="Technology / Data"):
+    """
+    Distribute missing skills into a week-by-week plan by weight.
+    """
+    if not missing_list:
+        return []
 
-    st.subheader("2) Self-rate each skill (0 = newbie, 5 = strong)")
-    grid_cols = st.columns(2)
-    cur_scores = {}
-    for i, skill in enumerate(skills):
-        with grid_cols[i % 2]:
-            default = S["self_scores"].get(skill, 0.0)
-            cur_scores[skill] = st.slider(f"{skill}", 0.0, 5.0, float(default), 0.5)
-    S["self_scores"] = cur_scores
+    items = sorted(missing_list, key=lambda x: (-x['weight'], x['skill']))
+    buckets = [[] for _ in range(weeks)]
+    # round-robin by importance
+    idx = 0
+    for it in items:
+        buckets[idx % weeks].append(it)
+        idx += 1
 
-    st.subheader("Gap radar")
-    cur = [norm(S["self_scores"][s]) for s in skills]
-    tgt = [norm(targets[s]) for s in skills]
-    fig = radar_chart(skills, cur, tgt)
-    st.plotly_chart(fig, use_container_width=True)
+    start = datetime.today()
+    plan = []
+    for w, skills in enumerate(buckets, start=1):
+        if not skills:
+            continue
+        wk_start = (start + timedelta(days=(w-1)*7)).strftime("%b %d")
+        wk_end   = (start + timedelta(days=(w*7-1))).strftime("%b %d")
+        plan.append({
+            "week": f"Week {w} ({wk_start}–{wk_end})",
+            "focus": [s["skill"] for s in skills],
+            "actions": sum([s["recs"] for s in skills], [])
+        })
+    return plan
 
-    gaps = []
-    # Default recommendations per broad role family
-    default_reco = {
-        "Data Science (Entry)": "do a focused project + share insights",
-        "Software Engineering (Entry)": "implement mini-projects with tests",
-        "Full-stack Software Engineer": "ship a small full-stack app with CI, tests, and deploy",
-        "Medicine (Student/Resident)": "case logs + OSCE drills",
-        "Cardiology Resident": "case logs + ECG/echo practice with guideline mapping",
-        "Business / Entrepreneur": "customer interviews + MVP iterations",
-        "Product Manager": "customer interviews + PRDs + lightweight experiments",
-        "Cybersecurity Analyst (Blue Team)": "blue-team labs + incident writeups",
-        "Sports (Athlete)": "structured drills + recovery routine",
-        "Sports Physiotherapist": "evidence-based protocols + athlete communication drills"
-    }
+def plot_radar(skills_scored, title="Skill Radar"):
+    labels = [s['skill'] for s in skills_scored][:10]  # limit chart clutter
+    if not labels:
+        return None
+    values = [s['score'] for s in skills_scored][:10]
+    angles = np.linspace(0, 2*np.pi, len(labels), endpoint=False)
+    values = np.concatenate((values, [values[0]]))
+    angles = np.concatenate((angles, [angles[0]]))
 
-    for s in skills:
-        c = norm(S["self_scores"][s]); t = norm(targets[s])
-        gap = max(0.0, t - c)
-        if gap < 0.25:
-            priority = "Low"
-        elif gap < 1.0:
-            priority = "Med"
-        else:
-            priority = "High"
-        gaps.append({
-            "skill": s, "current": c, "target": t, "gap": gap,
-            "priority": priority,
-            "recommendation": default_reco.get(S["role"], "practice + feedback loops")
+    fig = plt.figure(figsize=(6,6))
+    ax = plt.subplot(111, polar=True)
+    ax.plot(angles, values)
+    ax.fill(angles, values, alpha=0.15)
+    ax.set_thetagrids(angles * 180/np.pi, labels)
+    ax.set_title(title)
+    ax.set_rlim(0, 100)
+    return fig
+
+def make_pdf_report(summary, table_df, radar_png=None):
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    W, H = A4
+
+    y = H - 40
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(40, y, "Career Gap Mapper — Universal")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(40, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    y -= 20
+
+    for line in textwrap.wrap(summary, width=95):
+        c.drawString(40, y, line)
+        y -= 14
+
+    y -= 10
+    if radar_png is not None:
+        try:
+            img = ImageReader(radar_png)
+            c.drawImage(img, 40, y-220, width=250, height=250, preserveAspectRatio=True, mask='auto')
+        except Exception:
+            pass
+
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, 280, "Top Gaps & Actions:")
+    c.setFont("Helvetica", 10)
+
+    # Print up to 10 missing with 1 action each
+    y = 260
+    show_rows = table_df[table_df["Status"] == "Missing"].head(10).to_dict(orient="records")
+    for row in show_rows:
+        if y < 80:
+            c.showPage(); y = H - 60; c.setFont("Helvetica", 10)
+        skill = row["Skill"]
+        action = row.get("Top Action", "-")
+        c.drawString(40, y, f"• {skill}: {action}")
+        y -= 14
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf
+
+# ------------------------------
+# UI Layout
+# ------------------------------
+left, right = st.columns([1,1])
+
+with left:
+    st.subheader("1) Upload Resume")
+    up = st.file_uploader("PDF / DOCX / TXT", type=["pdf","docx","txt"])
+
+    st.subheader("2) Target Role / Goal")
+    domain = st.selectbox("Select domain", list(ONTOLOGY.keys()))
+    role = st.text_input("Role title (free text)", placeholder="e.g., Data Scientist, Physiotherapist, Striker, Product Manager")
+    jd = st.text_area("Paste Job Description or describe your goal", height=180,
+                      placeholder="Paste JD here or describe the responsibilities/expectations for your target role...")
+
+    st.subheader("3) Self-ratings (optional)")
+    st.caption("Boost/penalize specific skills to reflect your confidence (0–100).")
+    self_rate_inputs = {}
+    for sk in list(ONTOLOGY[domain]["skills"].keys())[:10]:
+        self_rate_inputs[sk] = st.slider(f"{sk}", 0, 100, 60)
+
+with right:
+    st.subheader("4) Analyze")
+    run = st.button("Run Career Gap Mapping", type="primary", use_container_width=True)
+
+    result_container = st.container()
+
+# ------------------------------
+# Execution
+# ------------------------------
+if run:
+    if up is None and not jd.strip():
+        st.warning("Please upload a resume and/or paste a target JD/goal.")
+        st.stop()
+
+    resume_text = read_resume(up) if up else ""
+    target_text = jd
+
+    # Extract skills
+    res_skills = set(extract_skills_freeform(resume_text, top_n=120, cutoff=82)) if resume_text else set()
+    jd_skills  = set(extract_skills_freeform(target_text, top_n=120, cutoff=82)) if target_text else set()
+
+    # If JD empty, use domain skills as required set
+    required_pool = jd_skills if jd_skills else set(ONTOLOGY[domain]["skills"].keys())
+
+    # Build scored table
+    rows = []
+    for sk in sorted(required_pool):
+        present = sk in res_skills
+        w = weight_for(sk, domain)
+        self_score = self_rate_inputs.get(sk, 60)
+        base_score = 80 if present else 20
+        # Weighted overall: presence + self rating + importance
+        overall = int(0.5*base_score + 0.3*self_score + 0.2*(w*20))
+        status = "Present" if present else "Missing"
+        recs = suggest_recs(sk, domain)
+        rows.append({
+            "Skill": sk,
+            "Importance(1-5)": w,
+            "Status": status,
+            "Self Rating(0-100)": self_score,
+            "Score(0-100)": overall,
+            "Top Action": recs[0],
+            "More Actions": "; ".join(recs)
         })
 
-    S["gaps"] = sorted(gaps, key=lambda x: x["gap"], reverse=True)
+    df = pd.DataFrame(rows).sort_values(["Status","Importance(1-5)","Score(0-100)"], ascending=[True, False, False])
+    present_df = df[df["Status"]=="Present"]
+    missing_df = df[df["Status"]=="Missing"]
 
-    st.markdown("#### Gap table")
-    df = pd.DataFrame(S["gaps"])
-    st.dataframe(df, use_container_width=True)
+    # Build radar on top 10 by importance
+    radar_items = []
+    for _, r in df.sort_values("Importance(1-5)", ascending=False).head(10).iterrows():
+        radar_items.append({"skill": r["Skill"], "score": r["Score(0-100)"]})
 
-    st.success("Go to **Roadmap** to create a 12-week plan from your gaps.")
+    fig = plot_radar(radar_items, title=f"{domain} — Top Skills Radar")
 
-# ---------------------- Roadmap ----------------------
-if page == "Roadmap":
-    st.header("🗺️ Your 12-week roadmap")
-    st.write(f"Role: **{S['role']}** | Hours/week: **{S['hours_per_week']}**")
+    with result_container:
+        st.markdown("### Results")
+        c1, c2, c3 = st.columns([1,1,1])
 
-    if not S["gaps"]:
-        st.warning("No gaps yet. Visit **Assess** first.")
-    else:
-        meaningful = [g for g in S["gaps"] if g["gap"] >= 0.25]
-        if not meaningful:
-            st.info("You are already close to target across the board 🎉")
+        c1.metric("Matched skills", int(present_df.shape[0]))
+        c2.metric("Missing skills", int(missing_df.shape[0]))
+        avg_score = int(df["Score(0-100)"].mean()) if not df.empty else 0
+        c3.metric("Overall readiness", avg_score)
+
+        st.markdown("#### Skills Table")
+        st.dataframe(df, use_container_width=True, height=360)
+
+        if fig:
+            st.markdown("#### Skill Radar")
+            st.pyplot(fig, clear_figure=True, use_container_width=False)
+
+        # Domain project ideas
+        st.markdown("#### Portfolio-Ready Project Ideas")
+        for idea in PROJECTS.get(domain, []):
+            st.markdown(f"- {idea}")
+
+        # Roadmap
+        missing_payload = []
+        for _, r in missing_df.iterrows():
+            missing_payload.append({
+                "skill": r["Skill"],
+                "weight": r["Importance(1-5)"],
+                "recs": RECS.get(r["Skill"], [r["Top Action"]])
+            })
+
+        weeks = st.slider("Roadmap length (weeks)", 4, 16, 8, help="Auto-distributes missing skills by importance.")
+        plan = roadmap(missing_payload, weeks=weeks, domain=domain)
+
+        st.markdown("#### Learning Roadmap")
+        if not plan:
+            st.info("No missing skills detected for the selected domain/goal — nice! Consider deepening strengths or expanding the scope.")
         else:
-            S["plan"] = make_12_week_plan(meaningful[:6], S["hours_per_week"])  # top 6 gaps
+            for wk in plan:
+                with st.expander(wk["week"], expanded=False):
+                    st.markdown("**Focus:** " + ", ".join(wk["focus"]))
+                    st.markdown("**Actions:**")
+                    for a in wk["actions"][:6]:
+                        st.markdown(f"- {a}")
 
-            for wk in S["plan"]:
-                with st.expander(f"Week {wk['week']} plan"):
-                    dfw = pd.DataFrame(wk["tasks"])
-                    st.dataframe(dfw, use_container_width=True)
+        # Export buttons
+        st.markdown("#### Export")
+        # CSV
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Download CSV (skills table)", csv, file_name="career_gap_map.csv", mime="text/csv")
 
-            role = ROLE_LIBRARY[S["role"]]
-            md = export_markdown(
-                {"name": S["role"], "hours_per_week": S["hours_per_week"]},
-                S["gaps"], S["plan"], role["resources"]
-            )
-            st.download_button("⬇️ Download report (Markdown)", md, file_name="career_gap_report.md")
+        # PDF (render radar to buffer)
+        radar_png_buf = None
+        if fig:
+            radar_png_buf = io.BytesIO()
+            fig.savefig(radar_png_buf, format="png", bbox_inches="tight")
+            radar_png_buf.seek(0)
 
-# ---------------------- Resources ----------------------
-if page == "Resources":
-    st.header("📚 Curated resources")
-    role = ROLE_LIBRARY[S["role"]]
-    st.write(f"For **{S['role']}**, here are helpful links grouped by category. High-priority gaps are highlighted.")
+        # Summary text
+        summary = (
+            f"Domain: {domain} | Role: {role or '—'} | "
+            f"Matched: {present_df.shape[0]} | Missing: {missing_df.shape[0]} | "
+            f"Readiness: {avg_score}/100. "
+            f"This report highlights your top strengths and the most impactful gaps with a week-by-week plan."
+        )
 
-    top_gaps = [g["skill"] for g in (S["gaps"][:5] if S["gaps"] else [])]
-    for cat, links in role["resources"].items():
-        badge = " 🔥" if any(s.lower() in cat.lower() for s in top_gaps) else ""
-        st.subheader(cat + badge)
-        for title, url in links:
-            st.markdown(f"- [{title}]({url})")
+        pdf_buf = make_pdf_report(summary, df, radar_png=radar_png_buf)
+        st.download_button("🧾 Download PDF Report", data=pdf_buf, file_name="career_gap_report.pdf", mime="application/pdf")
 
-# ---------------------- Tracker ----------------------
-if page == "Tracker":
-    st.header("✅ Weekly tracker")
-    if not S["plan"]:
-        st.warning("Create a plan in **Roadmap** first.")
-    else:
-        if "done" not in S:
-            S["done"] = {}  # key: (week, skill, focus) -> bool
+        st.markdown("---")
+        st.markdown("**Tips**")
+        st.markdown("- Tune self-ratings to reflect confidence; the radar and roadmap update instantly.")
+        st.markdown("- If you don’t have a JD, leave it blank and the app uses the domain skill map as the target.")
+        st.markdown("- Edit the ontology dictionaries in code to fit your market/roles even better.")
 
-        total = 0
-        completed = 0
-        for wk in S["plan"]:
-            st.markdown(f"### Week {wk['week']}")
-            cols = st.columns(2)
-            for i, task in enumerate(wk["tasks"]):
-                key = (wk["week"], task["skill"], task["focus"])
-                done_key = f"done_{wk['week']}_{i}"
-                prev = S["done"].get(key, False)
-                with cols[i % 2]:
-                    checked = st.checkbox(
-                        f"**{task['skill']}** — {task['focus']} _(~{task['hours']} h)_",
-                        value=prev, key=done_key
-                    )
-                S["done"][key] = checked
-                total += 1
-                completed += int(checked)
-
-        prog = 0 if total == 0 else int(100 * completed / total)
-        st.progress(prog)
-        st.info(f"Completed {completed} / {total} tasks ({prog}%). Keep going!")
-
-# ---------------------- Coach Bot ----------------------
-if page == "Coach Bot":
-    st.header("🤖 Coach Bot")
-    st.caption("A tiny rule-based assistant for quick tips.")
-
-    def coach_reply(msg):
-        m = msg.lower()
-        if "motivat" in m:
-            return "Momentum > motivation. Schedule tiny daily reps (15–20 min) and track streaks."
-        if "resume" in m or "cv" in m:
-            return "Write impact bullets: action verb + metric + outcome. e.g., 'Built X that reduced Y by Z%'."
-        if "interview" in m:
-            return "Use STAR: Situation, Task, Action, Result. Rehearse aloud with a timer."
-        if "burnout" in m or "tired" in m:
-            return "Deload week: 50–60% volume, keep the habit alive, sleep, hydrate, light walks."
-        if "focus" in m or "procrast" in m:
-            return "Set a 25-min focus sprint (no notifications), then 5-min break. Repeat x4."
-        return "Try asking about resume bullets, interviews, motivation, focus, or burnout."
-
-    if "chat" not in S:
-        S["chat"] = [{"role": "assistant", "content": "Hi! I'm your coach. Ask me for concise, practical tips."}]
-
-    for m in S["chat"]:
-        with st.chat_message(m["role"]):
-            st.write(m["content"])
-
-    user_msg = st.chat_input("Type here…")
-    if user_msg:
-        S["chat"].append({"role": "user", "content": user_msg})
-        with st.chat_message("user"): st.write(user_msg)
-        reply = coach_reply(user_msg)
-        S["chat"].append({"role": "assistant", "content": reply})
-        with st.chat_message("assistant"): st.write(reply)
-
-# ---------------------- Footer ----------------------
-st.markdown("---")
-st.caption("Built with ❤️ to help you bridge the gap. This tool gives guidance, not guarantees. Always adapt to your context.")
+# Footer
+st.caption("Made with ❤️ to help anyone — students, clinicians, athletes, managers, designers, teachers — map and close their career gaps.")
