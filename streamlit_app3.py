@@ -105,46 +105,79 @@ def analyze_resume(text, field):
             missing.append("Project experience")
     return missing
 
+def career_tips_bot(user_input, field):
+    response = ""
+    if field == "Technology":
+        if "project" in user_input:
+            response = "Work on open-source projects on GitHub to showcase your coding skills."
+        elif "internship" in user_input:
+            response = "Apply on platforms like Internshala, AngelList, and LinkedIn. Build side projects to stand out."
+        else:
+            response = "Stay updated with tech trends, participate in hackathons, and strengthen your DSA skills."
+    elif field == "Sports":
+        if "training" in user_input:
+            response = "Join local academies and register with state sports associations for advanced training."
+        elif "competition" in user_input:
+            response = "Start with district-level competitions, then progress to state and national tournaments."
+        else:
+            response = "Maintain a regular fitness schedule, track your performance, and seek mentorship from coaches."
+    elif field == "Business":
+        response = "Engage in case study competitions, improve networking skills, and follow Harvard Business Review insights."
+    elif field == "Medical":
+        response = "Participate in medical conferences, publish research, and join clinical internships for practical exposure."
+    elif field == "Law":
+        response = "Join moot courts, publish legal articles, and follow judgments from top courts to build knowledge."
+    elif field == "Arts & Design":
+        response = "Build a strong portfolio, participate in online design challenges, and stay creative every day."
+    else:
+        response = "Keep learning, building, and networking in your chosen field."
+    return response
+
 # ----------------- STREAMLIT APP -----------------
 def main():
     st.set_page_config(page_title="Career Gap Mapper", layout="wide")
-    st.title("🧭 Career Gap Mapper")
-    st.write("Upload your resume & get personalized career roadmap.")
 
-    uploaded_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
-    field = st.selectbox("Select your career field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
-    location = st.text_input("Enter your city (for internships)", "")
+    # Sidebar Navigation
+    st.sidebar.title("📌 Navigation")
+    page = st.sidebar.radio("Go to", ["Home", "Courses & Internships", "Events & Competitions", "Career Tips Bot"])
 
-    if uploaded_file:
-        text = extract_text_from_resume(uploaded_file)
-        st.subheader("📑 Resume Analysis")
-        missing = analyze_resume(text, field)
-        if missing:
-            st.warning("⚠️ Gaps Found in Resume:")
-            for m in missing:
-                st.write(f"- {m}")
-        else:
-            st.success("✅ Your resume looks strong!")
+    # -------------- Home --------------
+    if page == "Home":
+        st.title("🧭 Career Gap Mapper")
+        st.write("Upload your resume & get personalized career roadmap.")
 
-        # ---------- If Sports → Show Competitions ----------
+        uploaded_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
+        field = st.selectbox("Select your career field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
+        location = st.text_input("Enter your city (for internships)", "")
+
+        if uploaded_file:
+            text = extract_text_from_resume(uploaded_file)
+            st.subheader("📑 Resume Analysis")
+            missing = analyze_resume(text, field)
+            if missing:
+                st.warning("⚠️ Gaps Found in Resume:")
+                for m in missing:
+                    st.write(f"- {m}")
+            else:
+                st.success("✅ Your resume looks strong!")
+
+    # -------------- Courses & Internships --------------
+    elif page == "Courses & Internships":
+        st.title("🎓 Recommended Courses & Internships")
+        field = st.selectbox("Select your field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
+        location = st.text_input("Enter city (for internships)", "")
+
         if field == "Sports":
-            st.subheader("🏆 Sports Competitions & Events")
-            for e in competitions_data["Sports"]:
-                st.markdown(f"**[{e['name']}]({e['link']})**")
-                st.write(f"📄 {e['details']}")
-                st.write(f"📅 Registration Deadline: {e['deadline']}")
-                st.write("---")
+            st.info("⚽ For Sports, internships are not relevant. Please check Competitions page instead.")
         else:
-            # ---------- Recommended Courses ----------
-            st.subheader("🎓 Recommended Courses")
+            st.subheader("Courses")
             for c in courses_data.get(field, []):
                 st.markdown(f"**[{c['title']}]({c['link']})**")
                 st.write(f"📝 Requirements: {c['requirements']}")
                 st.write(f"📅 {c['start']} → {c['end']}")
                 st.write("---")
 
-            # ---------- Recommended Internships ----------
-            st.subheader("💼 Recommended Internships")
+            st.subheader("Internships")
             for i in internships_data.get(field, []):
                 if location.lower() in i["location"].lower() or location == "":
                     st.markdown(f"**{i['title']}** at **{i['company']}** ({i['location']})")
@@ -154,13 +187,27 @@ def main():
                     st.markdown(f"[Apply Here]({i['link']})")
                     st.write("---")
 
-            # ---------- Competitions & Events ----------
-            st.subheader("🏆 Competitions & Events")
-            for e in competitions_data.get(field, []):
-                st.markdown(f"**[{e['name']}]({e['link']})**")
-                st.write(f"📄 {e['details']}")
-                st.write(f"📅 Registration Deadline: {e['deadline']}")
-                st.write("---")
+    # -------------- Events & Competitions --------------
+    elif page == "Events & Competitions":
+        st.title("🏆 Events & Competitions")
+        field = st.selectbox("Select your field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
+
+        for e in competitions_data.get(field, []):
+            st.markdown(f"**[{e['name']}]({e['link']})**")
+            st.write(f"📄 {e['details']}")
+            st.write(f"📅 Registration Deadline: {e['deadline']}")
+            st.write("---")
+
+    # -------------- Career Tips Bot --------------
+    elif page == "Career Tips Bot":
+        st.title("🤖 Career Tips Bot")
+        field = st.selectbox("Select your field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
+        user_input = st.text_input("Ask a career-related question:")
+
+        if user_input:
+            response = career_tips_bot(user_input.lower(), field)
+            st.success(f"💡 {response}")
 
 if __name__ == "__main__":
     main()
+
