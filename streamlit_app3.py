@@ -18,98 +18,78 @@ st.markdown("""
     .big-title { font-size: 40px; font-weight: bold; color: #2E86AB; }
     .subtitle { font-size: 22px; color: #1B4F72; }
     .encourage { font-size: 18px; font-style: italic; color: #117A65; }
-    .highlight { background-color: #fffae6; padding: 4px; border-radius: 4px; }
     </style>
 """, unsafe_allow_html=True)
-
-# ---------------- GLOBAL RESUME TEXT ---------------- #
-if "resume_text" not in st.session_state:
-    st.session_state["resume_text"] = ""
 
 # ---------------- RESUME ANALYZER ---------------- #
 def analyze_resume(text, field):
     issues = []
     suggestions = []
-    keywords = []
 
+    # Weakness checks
     if "internship" not in text.lower():
         issues.append("No internship experience mentioned.")
-        suggestions.append("Apply for internships related to your field.")
-        keywords.append("internship")
+        suggestions.append("Consider applying for internships. [Internshala](https://internshala.com) or [LinkedIn](https://linkedin.com/jobs).")
 
     if "project" not in text.lower():
         issues.append("Projects not highlighted.")
-        suggestions.append("Add relevant field projects.")
-        keywords.append("project")
+        suggestions.append("Add field-related projects to showcase practical skills.")
 
     if len(text.split()) < 150:
-        issues.append("Resume seems short.")
-        suggestions.append("Add achievements, certifications, experiences.")
-        keywords.append("experience")
+        issues.append("Resume seems too short.")
+        suggestions.append("Add more details like skills, achievements, certifications.")
 
     if "skills" not in text.lower():
         issues.append("Skills section missing.")
-        suggestions.append("Add technical, soft, and field-specific skills.")
-        keywords.append("skills")
+        suggestions.append("Clearly mention technical, soft, and field-specific skills.")
 
-    # Field specific
     if field == "Technology" and "python" not in text.lower():
-        suggestions.append("Python is in-demand – consider learning it.")
-        keywords.append("python")
+        suggestions.append("Python is highly in demand in Tech roles – consider learning it.")
 
     if field == "Business" and "finance" not in text.lower():
-        suggestions.append("Add finance/business-related terms.")
-        keywords.append("finance")
+        suggestions.append("Consider strengthening business/finance keywords.")
 
-    return issues, suggestions, set(keywords)
+    return issues, suggestions
+
+# ---------------- EVENTS & COMPETITIONS ---------------- #
+def get_events(field):
+    data = {
+        "Technology": [
+            {"name": "Global AI Hackathon", "date": "Oct 2025", "link": "https://devpost.com", "desc": "Build innovative AI solutions."},
+            {"name": "Open Source Fest", "date": "Dec 2025", "link": "https://github.com", "desc": "Collaborate on open source projects."}
+        ],
+        "Sports": [
+            {"name": "National Athletics Championship", "date": "Sep 2025", "link": "https://sportsauthorityofindia.nic.in", "desc": "Track & field events."},
+            {"name": "Inter-City Football Cup", "date": "Nov 2025", "link": "https://aiff.com", "desc": "Local football competition."}
+        ],
+        "Medical": [
+            {"name": "World Health Congress", "date": "Oct 2025", "link": "https://who.int", "desc": "Global healthcare innovations."},
+            {"name": "AI in Medicine Summit", "date": "Nov 2025", "link": "https://medtech.com", "desc": "Intersection of AI & Healthcare."}
+        ],
+        "Business": [
+            {"name": "Startup Pitch Fest", "date": "Oct 2025", "link": "https://startupindia.gov.in", "desc": "Pitch your business idea."},
+            {"name": "Global Finance Summit", "date": "Nov 2025", "link": "https://forbes.com", "desc": "Networking for business leaders."}
+        ],
+    }
+    return data.get(field, [])
 
 # ---------------- COURSES & INTERNSHIPS ---------------- #
 courses = {
-    "Technology": [
-        {"title": "Python for Everybody", "type": "Free", "desc": "Learn Python from basics.", "skill": "python"},
-        {"title": "Data Science Specialization (Coursera)", "type": "Paid", "desc": "Complete data science roadmap.", "skill": "data science"},
-        {"title": "Full-Stack Web Development (FreeCodeCamp)", "type": "Free", "desc": "Learn web development.", "skill": "web development"},
-        {"title": "AI/ML Specialization (Udemy)", "type": "Paid", "desc": "Machine Learning from scratch.", "skill": "machine learning"},
-    ],
-    "Sports": [
-        {"title": "Sports Nutrition (Alison)", "type": "Free", "desc": "Learn athlete diet science.", "skill": "nutrition"},
-        {"title": "Sports Coaching (FutureLearn)", "type": "Paid", "desc": "Professional coaching methods.", "skill": "coaching"},
-        {"title": "Sports Analytics (Coursera)", "type": "Paid", "desc": "Apply data to sports.", "skill": "sports analytics"},
-    ],
-    "Medical": [
-        {"title": "Public Health (edX)", "type": "Free", "desc": "Basics of public health.", "skill": "public health"},
-        {"title": "AI in Medicine (Coursera)", "type": "Paid", "desc": "How AI is transforming medicine.", "skill": "ai medicine"},
-        {"title": "Surgery Basics (MedMastery)", "type": "Paid", "desc": "Surgical skills for beginners.", "skill": "surgery"},
-    ],
-    "Business": [
-        {"title": "Finance for Non-Finance (Coursera)", "type": "Paid", "desc": "Core finance skills.", "skill": "finance"},
-        {"title": "Entrepreneurship (Harvard)", "type": "Paid", "desc": "Start and grow a business.", "skill": "entrepreneurship"},
-        {"title": "Digital Marketing (Udemy)", "type": "Paid", "desc": "Complete digital marketing.", "skill": "marketing"},
-    ]
+    "Technology": ["Python Basics - FreeCodeCamp", "Data Science - Coursera", "AI/ML - Udemy"],
+    "Sports": ["Sports Nutrition - Alison", "Athlete Training - FutureLearn", "Sports Analytics - Coursera"],
+    "Medical": ["Public Health - edX", "Surgery Basics - MedMastery", "AI in Medicine - Coursera"],
+    "Business": ["Finance - Coursera", "Entrepreneurship - Harvard Online", "Digital Marketing - Udemy"]
 }
 
 internships = {
-    "Technology": [
-        {"title": "Google Summer of Code", "req": "Strong coding skills", "paid": True},
-        {"title": "Microsoft Internship", "req": "CS background, problem solving", "paid": True},
-        {"title": "Startup Tech Internships", "req": "Web/AI projects", "paid": False},
-    ],
-    "Sports": [
-        {"title": "Sports Authority of India Internship", "req": "Sports science knowledge", "paid": True},
-        {"title": "Football Coaching Internship", "req": "Training experience", "paid": False},
-    ],
-    "Medical": [
-        {"title": "WHO Internship", "req": "Public health interest", "paid": False},
-        {"title": "AIIMS Delhi Internship", "req": "Medical student background", "paid": True},
-    ],
-    "Business": [
-        {"title": "KPMG Internship", "req": "Finance/Accounting skills", "paid": True},
-        {"title": "Startup India Internship", "req": "Entrepreneurial mindset", "paid": False},
-    ]
+    "Technology": ["Google Summer of Code", "Microsoft Internship", "TCS Ignite"],
+    "Sports": ["Sports Authority of India Internships", "Fitness Startups", "Coaching Internships"],
+    "Medical": ["Hospital Internships", "WHO Internships", "AIIMS Delhi Internship"],
+    "Business": ["KPMG Internship", "PwC India Internship", "Start-up Internships"]
 }
 
 # ---------------- NAVIGATION ---------------- #
-menu = st.sidebar.radio("Navigate", ["Home + Resume Analyzer", "Courses & Internships"])
+menu = st.sidebar.radio("Navigate", ["Home + Resume Analyzer", "Courses & Internships", "Events & Competitions", "Career Tips Bot", "Resources"])
 
 # ---------------- HOME + RESUME ANALYZER ---------------- #
 if menu == "Home + Resume Analyzer":
@@ -128,10 +108,8 @@ if menu == "Home + Resume Analyzer":
         else:
             text = docx2txt.process(uploaded)
 
-        st.session_state["resume_text"] = text
-
         st.subheader("Resume Analysis 🔍")
-        issues, suggestions, missing_keywords = analyze_resume(text, field)
+        issues, suggestions = analyze_resume(text, field)
 
         if issues:
             st.error("Weaknesses Found:")
@@ -144,8 +122,6 @@ if menu == "Home + Resume Analyzer":
         for s in suggestions:
             st.write("✅ ", s)
 
-        st.session_state["missing_keywords"] = missing_keywords
-
 # ---------------- COURSES & INTERNSHIPS ---------------- #
 elif menu == "Courses & Internships":
     st.header("📚 Courses & Internships")
@@ -153,17 +129,42 @@ elif menu == "Courses & Internships":
 
     st.subheader("Recommended Courses")
     for c in courses[field]:
-        st.markdown(f"**{c['title']}** ({c['type']})")
-        st.write("📘", c["desc"])
-        if "missing_keywords" in st.session_state and c["skill"].lower() in st.session_state["missing_keywords"]:
-            st.markdown(f"<span class='highlight'>⚠️ This skill is missing in your resume</span>", unsafe_allow_html=True)
-        st.write("")
+        st.write("📘", c)
 
     st.subheader("Internships")
     for i in internships[field]:
-        st.markdown(f"**{i['title']}**")
-        st.write("📝 Requirement:", i["req"])
-        st.write("💰 Paid:", "Yes" if i["paid"] else "No")
-        if "missing_keywords" in st.session_state and any(word in i["req"].lower() for word in st.session_state["missing_keywords"]):
-            st.markdown(f"<span class='highlight'>⚠️ You might lack the requirement listed</span>", unsafe_allow_html=True)
-        st.write("")
+        st.write("💼", i)
+
+# ---------------- EVENTS & COMPETITIONS ---------------- #
+elif menu == "Events & Competitions":
+    st.header("🏆 Events & Competitions")
+    field = st.selectbox("Select your field:", ["Technology", "Sports", "Medical", "Business"])
+
+    events = get_events(field)
+    for e in events:
+        st.markdown(f"### {e['name']} ({e['date']})")
+        st.write(e["desc"])
+        st.markdown(f"[🔗 Register Here]({e['link']})")
+
+# ---------------- CAREER TIPS BOT ---------------- #
+elif menu == "Career Tips Bot":
+    st.header("🤖 AI Career Assistant")
+    query = st.text_input("Ask me anything about careers (skills, jobs, tips)...")
+    if query:
+        responses = [
+            "Focus on building projects to showcase your skills.",
+            "Networking on LinkedIn can open hidden opportunities.",
+            "Consistency in learning is more important than speed."
+        ]
+        st.write("💡", random.choice(responses))
+
+# ---------------- RESOURCES ---------------- #
+elif menu == "Resources":
+    st.header("🌐 Career Resources Hub")
+    st.write("📄 Resume Templates: [Canva](https://www.canva.com/resumes/templates/)")
+    st.write("💻 Freelancing: [Upwork](https://upwork.com), [Fiverr](https://fiverr.com)")
+    st.write("🎓 Scholarships: [DAAD](https://daad.de), [Chevening](https://chevening.org)")
+    st.write("🏆 Competitions: [Kaggle](https://kaggle.com), [Devpost](https://devpost.com)")
+
+st.markdown("---")
+st.caption("⚠️ Disclaimer: This is a career guidance tool. Always verify details from official sources before applying.")
