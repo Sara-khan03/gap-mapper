@@ -1,71 +1,110 @@
 import streamlit as st
 import random
 
-# --- Title ---
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="Career Gap Mapper", layout="wide")
-st.title("🌟 Career Gap Mapper")
-st.write("Turn your weaknesses into opportunities with smart guidance!")
 
-# --- Input Resume ---
-resume_text = st.text_area("📄 Paste Your Resume Here:", height=300)
+# --- MENU ---
+menu = ["🏠 Home", "📄 Resume Analyzer", "🎓 Courses & Internships", 
+        "🏆 Sports Pathway", "🩺 Medical & Healthcare", 
+        "💼 Business & Startups", "🤖 Career Mentor Bot", "📊 Dashboard"]
 
-# --- City Selection ---
-city = st.selectbox("🌍 Select Your City:", ["Delhi", "Mumbai", "Bangalore", "Hyderabad", "Chennai", "Pune", "Other"])
+choice = st.sidebar.radio("Navigate", menu)
 
-# --- Resume Analyzer ---
-if st.button("🔍 Analyze My Resume"):
-    st.subheader("📊 Resume Analysis Result")
+# --- HOME PAGE ---
+if choice == "🏠 Home":
+    st.image("https://img.freepik.com/free-photo/solar-panel-career-growth-concept.jpg", use_column_width=True)
+    st.title("🌟 Career Gap Mapper")
+    st.subheader("Turn your Gaps into Growth!")
+    st.write("👉 A platform for Students, Professionals, Sportspersons, Entrepreneurs, and Everyone building a career.")
+    st.success("✨ Every weakness is a hidden opportunity. Upgrade yourself today! ✨")
 
-    missing = []
-    if "intern" not in resume_text.lower():
-        missing.append("Internship")
-    if "experience" not in resume_text.lower():
-        missing.append("Work Experience")
-    if "education" not in resume_text.lower() and "degree" not in resume_text.lower():
-        missing.append("Education")
-    if "sport" not in resume_text.lower() and "champion" not in resume_text.lower():
-        missing.append("Sports Achievements")
-    if "business" not in resume_text.lower() and "startup" not in resume_text.lower():
-        missing.append("Business/Leadership")
+# --- RESUME ANALYZER ---
+elif choice == "📄 Resume Analyzer":
+    st.header("📄 Resume Gap Analyzer")
+    resume_text = st.text_area("Paste your resume here:", height=300)
 
-    # Show weak areas
-    if missing:
-        st.error("⚠️ Weak Areas Detected: " + ", ".join(missing))
-        st.write("Here’s how you can fix them:")
+    if st.button("🔍 Analyze"):
+        missing = []
+        if "intern" not in resume_text.lower(): missing.append("Internship")
+        if "experience" not in resume_text.lower(): missing.append("Work Experience")
+        if "degree" not in resume_text.lower() and "education" not in resume_text.lower(): missing.append("Education")
+        if "sport" not in resume_text.lower() and "champion" not in resume_text.lower(): missing.append("Sports Achievements")
+        if "startup" not in resume_text.lower() and "business" not in resume_text.lower(): missing.append("Business Exposure")
 
-        if "Education" in missing:
-            st.info("🎓 Suggested Courses: [Coursera](https://www.coursera.org), [edX](https://www.edx.org), [NPTEL](https://nptel.ac.in)")
+        if missing:
+            st.error("⚠️ Weak Areas Detected: " + ", ".join(missing))
+            for gap in missing:
+                if gap == "Education":
+                    st.info("🎓 Add certifications → [Coursera](https://www.coursera.org), [edX](https://www.edx.org), [NPTEL](https://nptel.ac.in)")
+                elif gap == "Internship":
+                    st.info("💼 Apply here → [Internshala](https://internshala.com), [LinkedIn](https://www.linkedin.com)")
+                elif gap == "Work Experience":
+                    st.info("🚀 Jobs → [Indeed](https://www.indeed.com), [Naukri](https://www.naukri.com)")
+                elif gap == "Sports Achievements":
+                    st.info("🏆 Tournaments → [AIU Sports](https://www.aiu.ac.in), [Olympics](https://olympics.com)")
+                elif gap == "Business Exposure":
+                    st.info("💡 Startup Resources → [Startup India](https://www.startupindia.gov.in), [Techstars](https://www.techstars.com)")
+        else:
+            st.success("✅ Your resume looks strong!")
 
-        if "Internship" in missing:
-            st.info("💼 Find Internships: [Internshala](https://internshala.com), [AngelList](https://wellfound.com), [LinkedIn](https://www.linkedin.com)")
+        score = random.randint(60, 95) if missing else random.randint(90, 100)
+        st.progress(score/100)
+        st.write(f"💯 Resume Strength Score: {score}/100")
 
-        if "Work Experience" in missing:
-            st.info("🚀 Jobs Platforms: [Indeed](https://www.indeed.com), [Naukri](https://www.naukri.com), [LinkedIn Jobs](https://www.linkedin.com/jobs)")
+# --- COURSES & INTERNSHIPS ---
+elif choice == "🎓 Courses & Internships":
+    st.header("🎓 Courses & Internships")
+    st.write("Upgrade with free & paid learning platforms:")
+    st.markdown("- [Coursera](https://www.coursera.org)")
+    st.markdown("- [edX](https://www.edx.org)")
+    st.markdown("- [Udemy](https://www.udemy.com)")
+    st.markdown("- [NPTEL](https://nptel.ac.in)")
+    st.markdown("💼 Internships → [Internshala](https://internshala.com), [LinkedIn](https://linkedin.com), [AngelList](https://wellfound.com)")
 
-        if "Sports Achievements" in missing:
-            st.info("🏆 Upcoming Tournaments: [AIU Sports Calendar](https://www.aiu.ac.in), [Olympic Sports](https://olympics.com)")
+# --- SPORTS PATHWAY ---
+elif choice == "🏆 Sports Pathway":
+    st.header("🏆 Sports Career Pathway")
+    st.write("Upcoming tournaments & opportunities:")
+    st.markdown("- [Olympic Games](https://olympics.com)")
+    st.markdown("- [AIU Sports Calendar](https://www.aiu.ac.in)")
+    st.markdown("- [Khelo India](https://kheloindia.gov.in)")
 
-        if "Business/Leadership" in missing:
-            st.info("💡 Startup Resources: [Startup India](https://www.startupindia.gov.in), [Y Combinator](https://www.ycombinator.com), [Techstars](https://www.techstars.com)")
+# --- MEDICAL ---
+elif choice == "🩺 Medical & Healthcare":
+    st.header("🩺 Medical & Healthcare Opportunities")
+    st.write("Explore volunteering, fellowships & internships:")
+    st.markdown("- [WHO Careers](https://www.who.int/careers)")
+    st.markdown("- [UNICEF Volunteer](https://www.unicef.org/volunteer)")
+    st.markdown("- [AIIMS Fellowships](https://www.aiims.edu)")
 
-    else:
-        st.success("✅ Great! Your resume looks strong and balanced across multiple fields!")
+# --- BUSINESS & STARTUPS ---
+elif choice == "💼 Business & Startups":
+    st.header("💼 Business & Startup Opportunities")
+    st.write("Resources for entrepreneurs:")
+    st.markdown("- [Startup India](https://www.startupindia.gov.in)")
+    st.markdown("- [Y Combinator](https://www.ycombinator.com)")
+    st.markdown("- [Techstars](https://www.techstars.com)")
 
-    # Score Meter
-    score = random.randint(60, 95) if missing else random.randint(90, 100)
-    st.progress(score / 100)
-    st.write(f"💯 Resume Strength Score: {score}/100")
+# --- CAREER MENTOR BOT ---
+elif choice == "🤖 Career Mentor Bot":
+    st.header("🤖 Ask Career Mentor Bot")
+    q = st.text_input("Ask me anything about careers:")
+    if q:
+        st.write("🤔 Thinking...")
+        st.success("💡 Suggested Path: Keep improving skills, apply for internships, and connect with mentors!")
 
-# --- Extra Tools ---
-st.sidebar.title("🔗 Quick Links")
-st.sidebar.markdown("[Google Careers](https://careers.google.com/)")
-st.sidebar.markdown("[Microsoft Careers](https://careers.microsoft.com/)")
-st.sidebar.markdown("[Amazon Jobs](https://www.amazon.jobs/)")
-st.sidebar.markdown("[Infosys Careers](https://www.infosys.com/careers)")
-st.sidebar.markdown("[TCS Careers](https://www.tcs.com/careers)")
+# --- DASHBOARD ---
+elif choice == "📊 Dashboard":
+    st.header("📊 Career Dashboard")
+    st.write("Visual overview of career opportunities.")
+    st.metric("Total Free Courses", "500+")
+    st.metric("Internship Platforms", "50+")
+    st.metric("Global Companies Hiring", "100+")
+    st.metric("Sports Championships", "30+ upcoming")
 
-# --- Motivational Quote ---
+# --- FOOTER ---
 st.markdown("---")
-st.markdown("✨ *Every gap is a hidden opportunity. Upgrade yourself today!* ✨")
+st.markdown("⚠️ *Disclaimer: This tool provides guidance. Final hiring/selection depends on recruiters, institutions, or organizers.*")
 
 
