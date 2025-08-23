@@ -1,100 +1,66 @@
 import streamlit as st
-import datetime
 import re
+from datetime import datetime
 
-# ------------------- APP HEADER -------------------
-st.set_page_config(page_title="Career Gap Mapper", page_icon="🧭", layout="wide")
-
-st.markdown(
-    """
+# App title and description
+st.markdown('''
     <div style="text-align:center;">
         <h1 style="color:#FFA500;">🧭 Career Gap Mapper</h1>
         <h3 style="color:#00BFFF;">Map your career journey, find gaps, and get guidance 🚀</h3>
     </div>
-    """,
-    unsafe_allow_html=True
-)
+    ''', unsafe_allow_html=True)
 
-# ------------------- INPUT OPTIONS -------------------
-st.subheader("📂 Upload Resume or Paste Career History")
-uploaded_file = st.file_uploader("Upload Resume (TXT format)", type=["txt"])
-career_text = ""
+st.write("Upload your resume text (or paste manually) and we’ll analyze for possible gaps in education, work, sports, medical, or business journeys.")
 
-if uploaded_file:
-    career_text = uploaded_file.read().decode("utf-8")
-else:
-    career_text = st.text_area("Or paste your career history here:", height=200)
+# Resume input
+resume_text = st.text_area("📄 Paste your Resume / CV text here:")
 
-# ------------------- DOMAIN SELECTION -------------------
-domain = st.selectbox(
-    "Select your domain",
-    ["Student", "Sportsperson", "Medical Professional", "Business/Entrepreneur", "Other"]
-)
-
-# ------------------- GAP ANALYSIS FUNCTION -------------------
-def analyze_gaps(text):
-    years = re.findall(r"\b(19|20)\d{2}\b", text)
-    years = sorted(set(map(int, years)))
-    
-    if not years:
-        return [], "⚠️ No years detected. Please provide career/education timeline with years."
-    
-    gaps = []
-    for i in range(len(years) - 1):
-        if years[i+1] - years[i] > 1:
-            gaps.append((years[i], years[i+1]))
-    
-    return years, gaps
-
-# ------------------- RUN ANALYSIS -------------------
-if st.button("🔍 Analyze Career Gaps"):
-    if career_text.strip():
-        years, gaps = analyze_gaps(career_text)
-        
-        if years:
-            st.success(f"📅 Career Timeline Detected: {years[0]} → {years[-1]}")
-            
-            if gaps:
-                st.warning("⚠️ Career Gaps Found:")
-                for g in gaps:
-                    st.write(f" - Gap between {g[0]} and {g[1]}")
-            else:
-                st.success("✅ No major career gaps detected. Well done!")
-            
-            # ------------------- DOMAIN BASED SUGGESTIONS -------------------
-            st.subheader("🎯 Personalized Suggestions")
-            if domain == "Student":
-                st.info("📘 Keep learning new skills during breaks. Online certifications can cover gaps.")
-            elif domain == "Sportsperson":
-                st.info("⚽ Highlight training, tournaments, or fitness programs even during breaks.")
-            elif domain == "Medical Professional":
-                st.info("🩺 Show internships, research, or volunteer work during study breaks.")
-            elif domain == "Business/Entrepreneur":
-                st.info("💼 Document experiments, freelancing, or networking even if startups failed.")
-            else:
-                st.info("🌍 Show volunteer work, freelancing, or learning during gaps.")
-            
-            # ------------------- MOTIVATIONAL QUOTE -------------------
-            st.markdown(
-                f"""
-                <div style="background:#f0f0f0; padding:15px; border-radius:10px; text-align:center;">
-                    <h4>"Every gap is an opportunity to learn, grow, and restart stronger 💪"</h4>
-                </div>
-                """, unsafe_allow_html=True
-            )
-            
-            # ------------------- REPORT DOWNLOAD -------------------
-            report = f"Career Timeline: {years[0]} - {years[-1]}\n"
-            if gaps:
-                report += "Gaps Detected:\n"
-                for g in gaps:
-                    report += f"- {g[0]} to {g[1]}\n"
-            else:
-                report += "No major gaps detected.\n"
-            report += f"\nSuggestions for {domain} provided."
-            
-            st.download_button("📥 Download Gap Report", report, file_name="career_gap_report.txt")
-        else:
-            st.error("❌ Could not detect any valid years in the input.")
+if st.button("Analyze Career Gaps"):
+    if not resume_text.strip():
+        st.warning("⚠️ Please paste your resume text first.")
     else:
-        st.error("⚠️ Please upload or paste your career history first.")
+        st.subheader("🔍 Analysis Results:")
+
+        # Simple regex checks for key sections
+        education_found = bool(re.search(r"(education|degree|university|college|school)", resume_text, re.I))
+        work_found = bool(re.search(r"(experience|internship|company|organization|employer)", resume_text, re.I))
+        sports_found = bool(re.search(r"(sports|athlete|tournament|championship|fitness)", resume_text, re.I))
+        medical_found = bool(re.search(r"(medical|health|doctor|hospital|treatment)", resume_text, re.I))
+        business_found = bool(re.search(r"(business|startup|entrepreneur|venture|investment)", resume_text, re.I))
+
+        gaps = []
+        if not education_found:
+            gaps.append("📘 Education background is missing or unclear.")
+        if not work_found:
+            gaps.append("💼 Work experience not highlighted.")
+        if not sports_found:
+            gaps.append("⚽ Sports/Extracurricular achievements not found.")
+        if not medical_found:
+            gaps.append("🩺 Medical/health-related details are missing.")
+        if not business_found:
+            gaps.append("📊 Business/entrepreneurship aspects are not mentioned.")
+
+        if gaps:
+            for g in gaps:
+                st.error(g)
+        else:
+            st.success("✅ Your resume looks well-rounded! No major gaps found.")
+
+        # Suggestions
+        st.subheader("💡 Suggestions to Improve Resume:")
+        if not education_found:
+            st.info("👉 Add your degrees, certifications, or relevant courses.")
+        if not work_found:
+            st.info("👉 Mention internships, jobs, or volunteer experience.")
+        if not sports_found:
+            st.info("👉 Include extracurriculars like sports, clubs, or competitions.")
+        if not medical_found:
+            st.info("👉 Highlight any medical/health training or relevant achievements.")
+        if not business_found:
+            st.info("👉 If applicable, add business ventures, leadership, or startup experiences.")
+
+# Footer
+st.markdown("---")
+st.markdown("🌟 *Career Gap Mapper helps you identify missing parts in your journey and guides you to build a stronger profile.*")
+
+
