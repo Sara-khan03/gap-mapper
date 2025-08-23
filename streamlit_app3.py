@@ -5,43 +5,52 @@ st.set_page_config(page_title="Career Gap Mapper", layout="wide")
 
 # Sidebar menu
 menu = [
-    "🏠 Home", "📄 Resume Analyzer", "🎓 Courses & Internships",
+    "📄 Resume Analyzer", "🏠 Home", "🎓 Courses & Internships",
     "🧭 Career Roadmaps", "📊 Skill Radar", "🏆 Sports Pathway",
     "🩺 Medical & Healthcare", "💼 Business & Startups",
     "📅 Events", "🎁 Inspire Me", "🤖 Career Mentor Bot"
 ]
 choice = st.sidebar.radio("Navigate", menu)
 
+# --- RESUME ANALYZER (default first page) ---
+if choice == "📄 Resume Analyzer":
+    st.title("📄 Resume Analyzer")
+    st.subheader("Upload your resume and discover missing skills, internships, and growth opportunities 🚀")
+
+    uploaded = st.file_uploader("📤 Upload your resume (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"])
+
+    if uploaded:
+        st.success("✅ Resume uploaded successfully!")
+
+        # Fake AI analysis simulation
+        st.markdown("### 🔎 Weakness Detected:")
+        st.write("• No internships found")
+        st.write("• Lacks leadership experience")
+        st.write("• Missing certifications in latest tools")
+
+        st.markdown("### 💡 Suggestions:")
+        st.write("• Apply for internships → [Internshala](https://internshala.com)")
+        st.write("• Earn certifications → [Coursera](https://coursera.org) / [edX](https://edx.org)")
+        st.write("• Add leadership/volunteer work")
+
+        st.markdown("### 🎯 Recommended Next Steps:")
+        st.write("1. Take a short project-based course")
+        st.write("2. Join a hackathon → [Devpost](https://devpost.com/hackathons)")
+        st.write("3. Add updated resume to [LinkedIn](https://linkedin.com)")
+
+    else:
+        st.info("⬆️ Please upload your resume to analyze strengths and weaknesses")
+
 # --- HOME ---
-if choice == "🏠 Home":
+elif choice == "🏠 Home":
     st.title("🚀 Career Gap Mapper")
     st.subheader("Find and fix gaps in your career journey 🌟")
     st.markdown("""
     This platform helps **students, professionals, sportspersons, doctors, entrepreneurs, and job-seekers**  
     to analyze their resume, discover missing skills, find internships, and explore upcoming opportunities.  
     """)
-    st.image("https://cdn.pixabay.com/photo/2016/11/29/02/00/adult-1868750_1280.jpg", caption="Empower your career with the right skills", use_container_width=True)
-
-    st.success("✅ Use the left sidebar to explore Resume Analysis, Courses, Events, Roadmaps, and more!")
-
-# --- RESUME ANALYZER ---
-elif choice == "📄 Resume Analyzer":
-    st.header("📄 Resume Analyzer")
-    uploaded = st.file_uploader("Upload your resume (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"])
-    if uploaded:
-        st.success("✅ Resume uploaded successfully!")
-        st.markdown("### 🔎 Weakness Detected:")
-        st.write("- No internships found")
-        st.write("- Lacks leadership experience")
-        st.write("- Missing certifications")
-
-        st.markdown("### 💡 Suggestions:")
-        st.write("- Add internships → Try [Internshala](https://internshala.com)")
-        st.write("- Earn certifications → Free courses on [Coursera](https://coursera.org) / [edX](https://edx.org)")
-        st.write("- Highlight teamwork or leadership projects")
-
-    else:
-        st.info("⬆️ Upload your resume to get instant feedback!")
+    st.image("https://cdn.pixabay.com/photo/2016/11/29/02/00/adult-1868750_1280.jpg", 
+             caption="Empower your career with the right skills", use_container_width=True)
 
 # --- COURSES & INTERNSHIPS ---
 elif choice == "🎓 Courses & Internships":
@@ -57,8 +66,6 @@ elif choice == "🎓 Courses & Internships":
     st.markdown("- [Internshala](https://internshala.com)")
     st.markdown("- [LinkedIn Internships](https://www.linkedin.com/jobs/internship-jobs)")
     st.markdown("- [Glassdoor](https://www.glassdoor.com/Job/internship-jobs-SRCH_KO0,10.htm)")
-
-    st.success("Tip: Apply for at least 2 internships per week to boost your chances 🚀")
 
 # --- ROADMAPS ---
 elif choice == "🧭 Career Roadmaps":
@@ -78,11 +85,6 @@ elif choice == "🧭 Career Roadmaps":
         3️⃣ Scholarships → [Khelo India](https://kheloindia.gov.in)  
         4️⃣ Train for nationals/international championships  
         """)
-
-# --- SKILL RADAR (placeholder now) ---
-elif choice == "📊 Skill Radar":
-    st.header("📊 Skill Gap Radar Chart")
-    st.info("⚡ Coming soon: Upload resume → see radar chart of skills vs demand")
 
 # --- EVENTS ---
 elif choice == "📅 Events":
@@ -118,3 +120,4 @@ elif choice == "🎁 Inspire Me":
 # Footer
 st.markdown("---")
 st.markdown("⚠️ This tool suggests career resources. Final success depends on your effort 🚀")
+
