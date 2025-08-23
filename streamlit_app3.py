@@ -1,166 +1,170 @@
 import streamlit as st
 import pdfplumber
 import docx2txt
-import requests
-from bs4 import BeautifulSoup
+import re
+import random
 
-# ============================
-# UTILS: Resume Parsing
-# ============================
-def extract_text_from_resume(uploaded_file):
-    if uploaded_file.name.endswith(".pdf"):
-        with pdfplumber.open(uploaded_file) as pdf:
-            return "\n".join([page.extract_text() or "" for page in pdf.pages])
-    elif uploaded_file.name.endswith(".docx"):
-        return docx2txt.process(uploaded_file)
-    elif uploaded_file.name.endswith(".txt"):
-        return uploaded_file.read().decode("utf-8")
-    else:
-        return ""
+# ---------------- PAGE CONFIG ---------------- #
+st.set_page_config(
+    page_title="Career Gap Mapper",
+    layout="wide",
+    page_icon="🎯",
+)
 
-def analyze_resume(text):
-    gaps = []
+# ---------------- STYLING ---------------- #
+st.markdown("""
+    <style>
+    .main { background-color: #f9fafc; }
+    .big-title { font-size: 40px; font-weight: bold; color: #2E86AB; }
+    .subtitle { font-size: 22px; color: #1B4F72; }
+    .encourage { font-size: 18px; font-style: italic; color: #117A65; }
+    </style>
+""", unsafe_allow_html=True)
+
+# ---------------- RESUME ANALYZER ---------------- #
+def analyze_resume(text, field):
+    issues = []
     suggestions = []
 
+    # Weakness checks
     if "internship" not in text.lower():
-        gaps.append("⚠️ No internships found")
-        suggestions.append("Add internships or real-world projects to strengthen experience.")
+        issues.append("No internship experience mentioned.")
+        suggestions.append("Consider applying for internships. [Internshala](https://internshala.com) or [LinkedIn](https://linkedin.com/jobs).")
+
     if "project" not in text.lower():
-        gaps.append("⚠️ Projects missing")
-        suggestions.append("Include personal or academic projects to showcase skills.")
-    if "python" not in text.lower() and "java" not in text.lower():
-        gaps.append("⚠️ No programming language skills detected")
-        suggestions.append("Add technical skills like Python, Java, etc.")
-    if "team" not in text.lower() and "lead" not in text.lower():
-        gaps.append("⚠️ Teamwork/leadership not mentioned")
-        suggestions.append("Mention teamwork, leadership, or communication skills.")
+        issues.append("Projects not highlighted.")
+        suggestions.append("Add field-related projects to showcase practical skills.")
 
-    return gaps, suggestions
+    if len(text.split()) < 150:
+        issues.append("Resume seems too short.")
+        suggestions.append("Add more details like skills, achievements, certifications.")
 
-# ============================
-# UTILS: Scraping Events
-# ============================
-def fetch_devpost_events(field):
-    url = "https://devpost.com/hackathons?challenge_type[]=online"
-    try:
-        r = requests.get(url, timeout=10)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        events = []
-        for card in soup.select('.hackathon-tile'):
-            title = card.select_one('.title').get_text(strip=True) if card.select_one('.title') else "No Title"
-            desc = card.select_one('.challenge-description').get_text(strip=True) if card.select_one('.challenge-description') else "No Description"
-            link = "https://devpost.com" + card.find('a')['href']
-            tag_text = card.get_text().lower()
-            if field.lower() in tag_text or field.lower() in title.lower():
-                events.append({"name": title, "desc": desc, "link": link})
-        return events[:5]
-    except Exception:
-        return []
+    if "skills" not in text.lower():
+        issues.append("Skills section missing.")
+        suggestions.append("Clearly mention technical, soft, and field-specific skills.")
 
-def fetch_kaggle_events():
-    url = "https://www.kaggle.com/competitions"
-    try:
-        r = requests.get(url, timeout=10)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        comps = []
-        for card in soup.select('.competition-card__title'):
-            comps.append({
-                "name": card.get_text(strip=True),
-                "link": "https://www.kaggle.com/competitions"
-            })
-        return comps[:5]
-    except Exception:
-        return []
+    if field == "Technology" and "python" not in text.lower():
+        suggestions.append("Python is highly in demand in Tech roles – consider learning it.")
 
-# ============================
-# STREAMLIT APP
-# ============================
-st.set_page_config(page_title="Career Gap Mapper", layout="wide")
+    if field == "Business" and "finance" not in text.lower():
+        suggestions.append("Consider strengthening business/finance keywords.")
 
-menu = ["Home & Resume Analyzer", "Career Roadmap", "Courses & Internships", "Events & Competitions"]
-choice = st.sidebar.radio("Navigate", menu)
+    return issues, suggestions
 
-# ============================
-# HOME + RESUME ANALYZER
-# ============================
-if choice == "Home & Resume Analyzer":
-    st.markdown("<h1 style='text-align:center;color:#2c3e50;'>📄 Career Gap Mapper</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Analyze your resume and find gaps with personalized suggestions 🚀</p>", unsafe_allow_html=True)
+# ---------------- EVENTS & COMPETITIONS ---------------- #
+def get_events(field):
+    data = {
+        "Technology": [
+            {"name": "Global AI Hackathon", "date": "Oct 2025", "link": "https://devpost.com", "desc": "Build innovative AI solutions."},
+            {"name": "Open Source Fest", "date": "Dec 2025", "link": "https://github.com", "desc": "Collaborate on open source projects."}
+        ],
+        "Sports": [
+            {"name": "National Athletics Championship", "date": "Sep 2025", "link": "https://sportsauthorityofindia.nic.in", "desc": "Track & field events."},
+            {"name": "Inter-City Football Cup", "date": "Nov 2025", "link": "https://aiff.com", "desc": "Local football competition."}
+        ],
+        "Medical": [
+            {"name": "World Health Congress", "date": "Oct 2025", "link": "https://who.int", "desc": "Global healthcare innovations."},
+            {"name": "AI in Medicine Summit", "date": "Nov 2025", "link": "https://medtech.com", "desc": "Intersection of AI & Healthcare."}
+        ],
+        "Business": [
+            {"name": "Startup Pitch Fest", "date": "Oct 2025", "link": "https://startupindia.gov.in", "desc": "Pitch your business idea."},
+            {"name": "Global Finance Summit", "date": "Nov 2025", "link": "https://forbes.com", "desc": "Networking for business leaders."}
+        ],
+    }
+    return data.get(field, [])
 
-    uploaded_file = st.file_uploader("Upload your Resume (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"])
-    if uploaded_file:
-        text = extract_text_from_resume(uploaded_file)
-        if text.strip():
-            gaps, suggestions = analyze_resume(text)
-            st.subheader("🔍 Resume Analysis")
-            if gaps:
-                st.error("⚠️ Gaps found in your resume:")
-                for g in gaps:
-                    st.write("- " + g)
-            else:
-                st.success("✅ No major gaps found! Your resume looks strong.")
+# ---------------- COURSES & INTERNSHIPS ---------------- #
+courses = {
+    "Technology": ["Python Basics - FreeCodeCamp", "Data Science - Coursera", "AI/ML - Udemy"],
+    "Sports": ["Sports Nutrition - Alison", "Athlete Training - FutureLearn", "Sports Analytics - Coursera"],
+    "Medical": ["Public Health - edX", "Surgery Basics - MedMastery", "AI in Medicine - Coursera"],
+    "Business": ["Finance - Coursera", "Entrepreneurship - Harvard Online", "Digital Marketing - Udemy"]
+}
 
-            st.subheader("💡 Suggestions")
-            for s in suggestions:
-                st.info(s)
+internships = {
+    "Technology": ["Google Summer of Code", "Microsoft Internship", "TCS Ignite"],
+    "Sports": ["Sports Authority of India Internships", "Fitness Startups", "Coaching Internships"],
+    "Medical": ["Hospital Internships", "WHO Internships", "AIIMS Delhi Internship"],
+    "Business": ["KPMG Internship", "PwC India Internship", "Start-up Internships"]
+}
+
+# ---------------- NAVIGATION ---------------- #
+menu = st.sidebar.radio("Navigate", ["Home + Resume Analyzer", "Courses & Internships", "Events & Competitions", "Career Tips Bot", "Resources"])
+
+# ---------------- HOME + RESUME ANALYZER ---------------- #
+if menu == "Home + Resume Analyzer":
+    st.markdown("<p class='big-title'>🎯 Career Gap Mapper</p>", unsafe_allow_html=True)
+    st.markdown("<p class='encourage'>Turn your career gaps into stepping stones for success!</p>", unsafe_allow_html=True)
+
+    field = st.selectbox("Choose your field:", ["Technology", "Sports", "Medical", "Business"])
+    uploaded = st.file_uploader("Upload your Resume (PDF/DOCX)", type=["pdf", "docx"])
+
+    if uploaded:
+        text = ""
+        if uploaded.name.endswith(".pdf"):
+            with pdfplumber.open(uploaded) as pdf:
+                for page in pdf.pages:
+                    text += page.extract_text() or ""
         else:
-            st.warning("Could not read content from resume.")
+            text = docx2txt.process(uploaded)
 
-# ============================
-# CAREER ROADMAP
-# ============================
-elif choice == "Career Roadmap":
-    st.title("🛣️ Career Roadmap")
-    st.write("Here’s a step-by-step path to strengthen your profile:")
-    roadmap = [
-        "📌 Complete at least 2 internships in your field.",
-        "📌 Work on 3+ projects (open-source, academic, personal).",
-        "📌 Get certified (Coursera, Udemy, Google, AWS).",
-        "📌 Participate in 2+ competitions/hackathons.",
-        "📌 Network via LinkedIn, GitHub, and local meetups."
-    ]
-    for step in roadmap:
-        st.success(step)
+        st.subheader("Resume Analysis 🔍")
+        issues, suggestions = analyze_resume(text, field)
 
-# ============================
-# COURSES & INTERNSHIPS
-# ============================
-elif choice == "Courses & Internships":
-    st.title("🎓 Courses & Internship Opportunities")
-
-    st.subheader("Recommended Free Courses")
-    st.markdown("- [Coursera Free Courses](https://www.coursera.org/courses?query=free)")
-    st.markdown("- [Udemy Free Courses](https://www.udemy.com/courses/free/)")
-    st.markdown("- [edX Free Courses](https://www.edx.org/course?price=free)")
-
-    st.subheader("Internship Portals")
-    st.markdown("- [Internshala](https://internshala.com)")
-    st.markdown("- [LinkedIn Internships](https://www.linkedin.com/jobs/internships/)")
-    st.markdown("- [Glassdoor Internships](https://www.glassdoor.com/Job/internship-jobs-SRCH_KO0,10.htm)")
-
-# ============================
-# EVENTS & COMPETITIONS
-# ============================
-elif choice == "Events & Competitions":
-    st.title("🏆 Upcoming Events, Hackathons & Competitions")
-    field = st.selectbox("Select your field of interest", ["Technology", "Business", "Medical", "Sports"])
-
-    st.subheader("🔥 Devpost Hackathons")
-    dev_events = fetch_devpost_events(field)
-    if dev_events:
-        for ev in dev_events:
-            st.markdown(f"**{ev['name']}**")
-            st.write(ev['desc'])
-            st.markdown(f"[🔗 Register here]({ev['link']})")
-            st.markdown("---")
-    else:
-        st.info("No relevant Devpost hackathons found right now.")
-
-    if field == "Technology":
-        st.subheader("🤖 Kaggle Competitions")
-        kaggle_events = fetch_kaggle_events()
-        if kaggle_events:
-            for ev in kaggle_events:
-                st.markdown(f"**{ev['name']}** - [🔗 View]({ev['link']})")
+        if issues:
+            st.error("Weaknesses Found:")
+            for i in issues:
+                st.write("- ", i)
         else:
-            st.info("No Kaggle competitions found right now.")
+            st.success("Your resume looks strong!")
+
+        st.info("Suggestions for Improvement:")
+        for s in suggestions:
+            st.write("✅ ", s)
+
+# ---------------- COURSES & INTERNSHIPS ---------------- #
+elif menu == "Courses & Internships":
+    st.header("📚 Courses & Internships")
+    field = st.selectbox("Choose your field:", ["Technology", "Sports", "Medical", "Business"])
+
+    st.subheader("Recommended Courses")
+    for c in courses[field]:
+        st.write("📘", c)
+
+    st.subheader("Internships")
+    for i in internships[field]:
+        st.write("💼", i)
+
+# ---------------- EVENTS & COMPETITIONS ---------------- #
+elif menu == "Events & Competitions":
+    st.header("🏆 Events & Competitions")
+    field = st.selectbox("Select your field:", ["Technology", "Sports", "Medical", "Business"])
+
+    events = get_events(field)
+    for e in events:
+        st.markdown(f"### {e['name']} ({e['date']})")
+        st.write(e["desc"])
+        st.markdown(f"[🔗 Register Here]({e['link']})")
+
+# ---------------- CAREER TIPS BOT ---------------- #
+elif menu == "Career Tips Bot":
+    st.header("🤖 AI Career Assistant")
+    query = st.text_input("Ask me anything about careers (skills, jobs, tips)...")
+    if query:
+        responses = [
+            "Focus on building projects to showcase your skills.",
+            "Networking on LinkedIn can open hidden opportunities.",
+            "Consistency in learning is more important than speed."
+        ]
+        st.write("💡", random.choice(responses))
+
+# ---------------- RESOURCES ---------------- #
+elif menu == "Resources":
+    st.header("🌐 Career Resources Hub")
+    st.write("📄 Resume Templates: [Canva](https://www.canva.com/resumes/templates/)")
+    st.write("💻 Freelancing: [Upwork](https://upwork.com), [Fiverr](https://fiverr.com)")
+    st.write("🎓 Scholarships: [DAAD](https://daad.de), [Chevening](https://chevening.org)")
+    st.write("🏆 Competitions: [Kaggle](https://kaggle.com), [Devpost](https://devpost.com)")
+
+st.markdown("---")
+st.caption("⚠️ Disclaimer: This is a career guidance tool. Always verify details from official sources before applying.")
