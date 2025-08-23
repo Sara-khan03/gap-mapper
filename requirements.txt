@@ -1,7 +1,8 @@
 streamlit
 pdfplumber
+docx2txt
 pandas
 plotly
 requests
 beautifulsoup4
-
+PyPDF2
