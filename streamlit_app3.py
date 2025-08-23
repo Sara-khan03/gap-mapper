@@ -1,123 +1,151 @@
 import streamlit as st
-import random
+import pdfplumber
+import docx2txt
 
 st.set_page_config(page_title="Career Gap Mapper", layout="wide")
 
-# Sidebar menu
+# Sidebar Navigation (removed separate analyzer)
 menu = [
-    "📄 Resume Analyzer", "🏠 Home", "🎓 Courses & Internships",
-    "🧭 Career Roadmaps", "📊 Skill Radar", "🏆 Sports Pathway",
-    "🩺 Medical & Healthcare", "💼 Business & Startups",
-    "📅 Events", "🎁 Inspire Me", "🤖 Career Mentor Bot"
+    "🏠 Home (Resume Analyzer)", "🎓 Courses & Internships",
+    "🧭 Career Roadmaps", "📅 Events", "🎁 Inspire Me"
 ]
 choice = st.sidebar.radio("Navigate", menu)
 
-# --- RESUME ANALYZER (default first page) ---
-if choice == "📄 Resume Analyzer":
-    st.title("📄 Resume Analyzer")
-    st.subheader("Upload your resume and discover missing skills, internships, and growth opportunities 🚀")
+# -------- Helper Functions ----------
+def extract_text_from_resume(file):
+    text = ""
+    if file.name.endswith(".pdf"):
+        with pdfplumber.open(file) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() + "\n"
+    elif file.name.endswith(".docx"):
+        text = docx2txt.process(file)
+    else:  # TXT
+        text = file.read().decode("utf-8")
+    return text
 
-    uploaded = st.file_uploader("📤 Upload your resume (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"])
+def analyze_resume(text, field):
+    findings = {"skills": [], "education": [], "internships": [], "certifications": []}
+    text_lower = text.lower()
+
+    # Base keywords
+    base_skills = ["leadership", "communication", "teamwork", "project", "excel"]
+    edu_keywords = ["bachelor", "master", "phd", "mba", "degree", "school"]
+    intern_keywords = ["internship", "trainee", "apprentice"]
+    cert_keywords = ["certified", "certificate", "certification", "coursera", "udemy", "edx"]
+
+    # Field-specific keywords
+    field_keywords = {
+        "Tech": ["python", "java", "c++", "machine learning", "ai", "data science", "sql", "cloud"],
+        "Medical": ["mbbs", "doctor", "nurse", "surgery", "clinical", "patient", "pharma"],
+        "Sports": ["athlete", "tournament", "championship", "medal", "training", "fitness"],
+        "Business": ["management", "strategy", "finance", "marketing", "startup", "sales"]
+    }
+
+    # Check skills
+    for skill in base_skills + field_keywords.get(field, []):
+        if skill in text_lower:
+            findings["skills"].append(skill)
+
+    # Other checks
+    for edu in edu_keywords:
+        if edu in text_lower:
+            findings["education"].append(edu)
+    for i in intern_keywords:
+        if i in text_lower:
+            findings["internships"].append(i)
+    for c in cert_keywords:
+        if c in text_lower:
+            findings["certifications"].append(c)
+
+    return findings
+
+def suggest_actions(results, field):
+    suggestions = []
+
+    if not results["internships"]:
+        suggestions.append("📌 No internships found — apply for internships to gain experience.")
+    if not results["certifications"]:
+        suggestions.append("📌 No certifications found — add at least 1-2 industry-recognized certifications.")
+    if len(results["skills"]) < 3:
+        suggestions.append("📌 Very few skills detected — improve your skillset.")
+
+    # Field-specific suggestions
+    if field == "Tech":
+        suggestions += [
+            "💻 Learn coding & problem-solving on [LeetCode](https://leetcode.com)",
+            "☁️ Get cloud certification: [AWS Training](https://aws.amazon.com/training/)",
+            "📊 Data skills: [Kaggle](https://kaggle.com)"
+        ]
+    elif field == "Medical":
+        suggestions += [
+            "🏥 Join medical conferences on [WHO Events](https://www.who.int/news-room/events)",
+            "📖 Free courses: [Medscape](https://www.medscape.org)",
+            "💉 Research internships: [PubMed Clinical Trials](https://clinicaltrials.gov)"
+        ]
+    elif field == "Sports":
+        suggestions += [
+            "⚽ Check upcoming tournaments: [Khelo India](https://kheloindia.gov.in)",
+            "💪 Fitness & diet courses: [Coursera Sports Science](https://www.coursera.org/specializations/sport-science)",
+            "🏆 Apply for sports internships: [Internshala Sports](https://internshala.com)"
+        ]
+    elif field == "Business":
+        suggestions += [
+            "📈 Learn finance & marketing: [Coursera MBA Essentials](https://www.coursera.org/learn/essentials-of-mba)",
+            "🤝 Networking: [LinkedIn Business](https://linkedin.com)",
+            "🚀 Explore startup programs: [Y Combinator](https://www.ycombinator.com)"
+        ]
+
+    return suggestions
+
+# -------- PAGES ----------
+if choice == "🏠 Home (Resume Analyzer)":
+    st.title("🚀 Career Gap Mapper — Resume Analyzer")
+    st.subheader("Helping Everyone: Students | Sportspersons | Medical | Business | Tech")
+    st.write("Upload your resume to detect **gaps** and get **personalized career suggestions** 🌟")
+
+    field = st.selectbox("Select your career field:", ["Tech", "Medical", "Sports", "Business"])
+    uploaded = st.file_uploader("📤 Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
 
     if uploaded:
-        st.success("✅ Resume uploaded successfully!")
+        text = extract_text_from_resume(uploaded)
+        results = analyze_resume(text, field)
 
-        # Fake AI analysis simulation
-        st.markdown("### 🔎 Weakness Detected:")
-        st.write("• No internships found")
-        st.write("• Lacks leadership experience")
-        st.write("• Missing certifications in latest tools")
+        st.subheader("🔎 Resume Insights")
+        st.write("**Skills Found:**", results["skills"] if results["skills"] else "❌ None detected")
+        st.write("**Education Mentioned:**", results["education"] if results["education"] else "❌ None detected")
+        st.write("**Internships:**", results["internships"] if results["internships"] else "❌ None detected")
+        st.write("**Certifications:**", results["certifications"] if results["certifications"] else "❌ None detected")
 
-        st.markdown("### 💡 Suggestions:")
-        st.write("• Apply for internships → [Internshala](https://internshala.com)")
-        st.write("• Earn certifications → [Coursera](https://coursera.org) / [edX](https://edx.org)")
-        st.write("• Add leadership/volunteer work")
-
-        st.markdown("### 🎯 Recommended Next Steps:")
-        st.write("1. Take a short project-based course")
-        st.write("2. Join a hackathon → [Devpost](https://devpost.com/hackathons)")
-        st.write("3. Add updated resume to [LinkedIn](https://linkedin.com)")
+        st.subheader("⚠️ Gaps Identified & Suggestions")
+        actions = suggest_actions(results, field)
+        for act in actions:
+            st.markdown(f"- {act}")
 
     else:
-        st.info("⬆️ Please upload your resume to analyze strengths and weaknesses")
-
-# --- HOME ---
-elif choice == "🏠 Home":
-    st.title("🚀 Career Gap Mapper")
-    st.subheader("Find and fix gaps in your career journey 🌟")
-    st.markdown("""
-    This platform helps **students, professionals, sportspersons, doctors, entrepreneurs, and job-seekers**  
-    to analyze their resume, discover missing skills, find internships, and explore upcoming opportunities.  
-    """)
-    st.image("https://cdn.pixabay.com/photo/2016/11/29/02/00/adult-1868750_1280.jpg", 
-             caption="Empower your career with the right skills", use_container_width=True)
+        st.info("⬆️ Upload a resume file to get started")
 
 # --- COURSES & INTERNSHIPS ---
 elif choice == "🎓 Courses & Internships":
-    st.header("🎓 Courses & Internships")
-    st.markdown("Here are some free and paid resources to strengthen your profile:")
-
-    st.subheader("📚 Courses")
-    st.markdown("- [FreeCodeCamp](https://www.freecodecamp.org/) → Free coding & web dev")
-    st.markdown("- [Coursera](https://www.coursera.org/) → Data Science, Business, Healthcare")
-    st.markdown("- [Khan Academy](https://www.khanacademy.org/) → Basics & fundamentals")
-
-    st.subheader("💼 Internships")
-    st.markdown("- [Internshala](https://internshala.com)")
-    st.markdown("- [LinkedIn Internships](https://www.linkedin.com/jobs/internship-jobs)")
-    st.markdown("- [Glassdoor](https://www.glassdoor.com/Job/internship-jobs-SRCH_KO0,10.htm)")
+    st.title("🎓 Courses & Internships")
+    st.markdown("Boost your resume with these resources:")
+    st.write("- [Coursera](https://coursera.org)")
+    st.write("- [Internshala](https://internshala.com)")
+    st.write("- [Kaggle](https://kaggle.com)")
 
 # --- ROADMAPS ---
 elif choice == "🧭 Career Roadmaps":
-    st.header("🧭 Career Roadmaps")
-    career = st.selectbox("Choose your field:", ["Data Scientist", "Software Engineer", "Doctor", "Athlete", "Entrepreneur"])
-    if career == "Data Scientist":
-        st.markdown("""
-        1️⃣ Learn Python & Statistics → [Coursera](https://www.coursera.org)  
-        2️⃣ Do projects on [Kaggle](https://www.kaggle.com)  
-        3️⃣ Internship → [Internshala](https://internshala.com)  
-        4️⃣ Apply for jobs → [LinkedIn](https://linkedin.com)  
-        """)
-    elif career == "Athlete":
-        st.markdown("""
-        1️⃣ Join local sports clubs  
-        2️⃣ Compete at district/state level  
-        3️⃣ Scholarships → [Khelo India](https://kheloindia.gov.in)  
-        4️⃣ Train for nationals/international championships  
-        """)
+    st.title("🧭 Career Roadmaps")
+    st.write("Step-by-step learning paths for careers.")
 
 # --- EVENTS ---
 elif choice == "📅 Events":
-    st.header("📅 Upcoming Events")
-    st.subheader("Hackathons & Tech Competitions")
-    st.markdown("- [Devpost Hackathons](https://devpost.com/hackathons)")
-    st.markdown("- [Kaggle Competitions](https://www.kaggle.com/competitions)")
-
-    st.subheader("Sports Events")
-    st.markdown("- [Olympics](https://olympics.com)")
-    st.markdown("- [Khelo India](https://kheloindia.gov.in)")
-
-    st.subheader("Medical Conferences")
-    st.markdown("- [WHO Events](https://www.who.int/news-room/events)")
-    st.markdown("- [AIIMS Workshops](https://www.aiims.edu)")
+    st.title("📅 Events & Competitions")
+    st.write("- [Devpost Hackathons](https://devpost.com/hackathons)")
+    st.write("- [Khelo India](https://kheloindia.gov.in)")
+    st.write("- [Medical Conferences](https://www.who.int/news-room/events)")
 
 # --- INSPIRE ME ---
 elif choice == "🎁 Inspire Me":
-    st.header("🎁 Inspire Me!")
-    quotes = [
-        "Dream big, work hard, stay focused.",
-        "Every weakness is a chance to grow.",
-        "Opportunities don't happen, you create them."
-    ]
-    st.success("💡 " + random.choice(quotes))
-
-    st.subheader("🎓 Random Free Course")
-    st.markdown("- [FreeCodeCamp](https://www.freecodecamp.org)")
-
-    st.subheader("🏆 Random Competition")
-    st.markdown("- [Hackerearth Challenges](https://www.hackerearth.com/challenges/)")
-
-# Footer
-st.markdown("---")
-st.markdown("⚠️ This tool suggests career resources. Final success depends on your effort 🚀")
-
+    st.title("🎁 Inspire Me")
+    st.success("💡 Every gap is an opportunity to grow!")
