@@ -1,170 +1,124 @@
 import streamlit as st
 import pdfplumber
 import docx2txt
-import re
-import random
+import requests
+from datetime import datetime
 
-# ---------------- PAGE CONFIG ---------------- #
-st.set_page_config(
-    page_title="Career Gap Mapper",
-    layout="wide",
-    page_icon="🎯",
-)
-
-# ---------------- STYLING ---------------- #
-st.markdown("""
-    <style>
-    .main { background-color: #f9fafc; }
-    .big-title { font-size: 40px; font-weight: bold; color: #2E86AB; }
-    .subtitle { font-size: 22px; color: #1B4F72; }
-    .encourage { font-size: 18px; font-style: italic; color: #117A65; }
-    </style>
-""", unsafe_allow_html=True)
-
-# ---------------- RESUME ANALYZER ---------------- #
-def analyze_resume(text, field):
-    issues = []
-    suggestions = []
-
-    # Weakness checks
-    if "internship" not in text.lower():
-        issues.append("No internship experience mentioned.")
-        suggestions.append("Consider applying for internships. [Internshala](https://internshala.com) or [LinkedIn](https://linkedin.com/jobs).")
-
-    if "project" not in text.lower():
-        issues.append("Projects not highlighted.")
-        suggestions.append("Add field-related projects to showcase practical skills.")
-
-    if len(text.split()) < 150:
-        issues.append("Resume seems too short.")
-        suggestions.append("Add more details like skills, achievements, certifications.")
-
-    if "skills" not in text.lower():
-        issues.append("Skills section missing.")
-        suggestions.append("Clearly mention technical, soft, and field-specific skills.")
-
-    if field == "Technology" and "python" not in text.lower():
-        suggestions.append("Python is highly in demand in Tech roles – consider learning it.")
-
-    if field == "Business" and "finance" not in text.lower():
-        suggestions.append("Consider strengthening business/finance keywords.")
-
-    return issues, suggestions
-
-# ---------------- EVENTS & COMPETITIONS ---------------- #
-def get_events(field):
-    data = {
-        "Technology": [
-            {"name": "Global AI Hackathon", "date": "Oct 2025", "link": "https://devpost.com", "desc": "Build innovative AI solutions."},
-            {"name": "Open Source Fest", "date": "Dec 2025", "link": "https://github.com", "desc": "Collaborate on open source projects."}
-        ],
-        "Sports": [
-            {"name": "National Athletics Championship", "date": "Sep 2025", "link": "https://sportsauthorityofindia.nic.in", "desc": "Track & field events."},
-            {"name": "Inter-City Football Cup", "date": "Nov 2025", "link": "https://aiff.com", "desc": "Local football competition."}
-        ],
-        "Medical": [
-            {"name": "World Health Congress", "date": "Oct 2025", "link": "https://who.int", "desc": "Global healthcare innovations."},
-            {"name": "AI in Medicine Summit", "date": "Nov 2025", "link": "https://medtech.com", "desc": "Intersection of AI & Healthcare."}
-        ],
-        "Business": [
-            {"name": "Startup Pitch Fest", "date": "Oct 2025", "link": "https://startupindia.gov.in", "desc": "Pitch your business idea."},
-            {"name": "Global Finance Summit", "date": "Nov 2025", "link": "https://forbes.com", "desc": "Networking for business leaders."}
-        ],
-    }
-    return data.get(field, [])
-
-# ---------------- COURSES & INTERNSHIPS ---------------- #
-courses = {
-    "Technology": ["Python Basics - FreeCodeCamp", "Data Science - Coursera", "AI/ML - Udemy"],
-    "Sports": ["Sports Nutrition - Alison", "Athlete Training - FutureLearn", "Sports Analytics - Coursera"],
-    "Medical": ["Public Health - edX", "Surgery Basics - MedMastery", "AI in Medicine - Coursera"],
-    "Business": ["Finance - Coursera", "Entrepreneurship - Harvard Online", "Digital Marketing - Udemy"]
+# ----------------- STATIC DATA -----------------
+courses_data = {
+    "Technology": [
+        {"title": "Python for Everybody (Free)", "link": "https://www.coursera.org/specializations/python", 
+         "requirements": "Beginner friendly", "start": "Anytime", "end": "Self-paced"},
+        {"title": "Data Science Professional Certificate (Paid)", "link": "https://www.coursera.org/professional-certificates/ibm-data-science", 
+         "requirements": "Basic Python", "start": "2025-09-01", "end": "2026-01-01"},
+    ],
+    "Business": [
+        {"title": "Introduction to Business (Free)", "link": "https://online.hbs.edu", 
+         "requirements": "None", "start": "Anytime", "end": "Self-paced"},
+        {"title": "Wharton Business Strategy (Paid)", "link": "https://www.coursera.org/specializations/wharton-strategy", 
+         "requirements": "Bachelor’s degree preferred", "start": "2025-10-01", "end": "2026-02-01"},
+    ],
+    "Medical": [
+        {"title": "Basics of Clinical Research", "link": "https://nptel.ac.in", 
+         "requirements": "Medical/Science background", "start": "2025-09-15", "end": "2026-01-30"},
+    ],
+    "Sports": [
+        {"title": "Sports Nutrition Fundamentals", "link": "https://www.edx.org", 
+         "requirements": "Interest in sports", "start": "2025-09-10", "end": "2026-02-10"},
+    ],
+    "Law": [
+        {"title": "International Law (Free)", "link": "https://www.coursera.org/learn/international-law", 
+         "requirements": "None", "start": "Anytime", "end": "Self-paced"},
+    ],
+    "Arts & Design": [
+        {"title": "Graphic Design Specialization", "link": "https://www.coursera.org/specializations/graphic-design", 
+         "requirements": "Creativity & computer access", "start": "Anytime", "end": "Self-paced"},
+    ]
 }
 
-internships = {
-    "Technology": ["Google Summer of Code", "Microsoft Internship", "TCS Ignite"],
-    "Sports": ["Sports Authority of India Internships", "Fitness Startups", "Coaching Internships"],
-    "Medical": ["Hospital Internships", "WHO Internships", "AIIMS Delhi Internship"],
-    "Business": ["KPMG Internship", "PwC India Internship", "Start-up Internships"]
+internships_data = {
+    "Technology": [
+        {"title": "Web Development Intern", "company": "Google", "location": "Bangalore", 
+         "stipend": "₹20,000/month", "requirements": "HTML, CSS, JS", 
+         "start": "2025-09-01", "end": "2025-09-20", "link": "https://careers.google.com"},
+    ],
+    "Business": [
+        {"title": "Marketing Intern", "company": "Unilever", "location": "Mumbai", 
+         "stipend": "₹15,000/month", "requirements": "MBA Student", 
+         "start": "2025-09-05", "end": "2025-09-25", "link": "https://unilever.com/careers"},
+    ],
+    "Medical": [
+        {"title": "Clinical Research Intern", "company": "AIIMS", "location": "Delhi", 
+         "stipend": "₹10,000/month", "requirements": "Medical student", 
+         "start": "2025-09-10", "end": "2025-09-30", "link": "https://aiims.edu"},
+    ],
+    "Sports": [
+        {"title": "Sports Analyst Intern", "company": "ESPN India", "location": "Hyderabad", 
+         "stipend": "₹12,000/month", "requirements": "Sports knowledge, analytics", 
+         "start": "2025-09-15", "end": "2025-10-05", "link": "https://espncricinfo.com"},
+    ]
 }
 
-# ---------------- NAVIGATION ---------------- #
-menu = st.sidebar.radio("Navigate", ["Home + Resume Analyzer", "Courses & Internships", "Events & Competitions", "Career Tips Bot", "Resources"])
+# ----------------- HELPER FUNCTIONS -----------------
+def extract_text_from_resume(uploaded_file):
+    text = ""
+    if uploaded_file.name.endswith(".pdf"):
+        with pdfplumber.open(uploaded_file) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ""
+    elif uploaded_file.name.endswith(".docx"):
+        text = docx2txt.process(uploaded_file)
+    return text.lower()
 
-# ---------------- HOME + RESUME ANALYZER ---------------- #
-if menu == "Home + Resume Analyzer":
-    st.markdown("<p class='big-title'>🎯 Career Gap Mapper</p>", unsafe_allow_html=True)
-    st.markdown("<p class='encourage'>Turn your career gaps into stepping stones for success!</p>", unsafe_allow_html=True)
+def analyze_resume(text):
+    missing = []
+    if "internship" not in text:
+        missing.append("Internship experience")
+    if "project" not in text:
+        missing.append("Project experience")
+    if "python" not in text:
+        missing.append("Python skill (for tech fields)")
+    return missing
 
-    field = st.selectbox("Choose your field:", ["Technology", "Sports", "Medical", "Business"])
-    uploaded = st.file_uploader("Upload your Resume (PDF/DOCX)", type=["pdf", "docx"])
+# ----------------- STREAMLIT APP -----------------
+def main():
+    st.set_page_config(page_title="Career Gap Mapper", layout="wide")
+    st.title("🧭 Career Gap Mapper")
+    st.write("Upload your resume & get personalized recommendations (Courses, Internships, Events).")
 
-    if uploaded:
-        text = ""
-        if uploaded.name.endswith(".pdf"):
-            with pdfplumber.open(uploaded) as pdf:
-                for page in pdf.pages:
-                    text += page.extract_text() or ""
+    uploaded_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
+    field = st.selectbox("Select your career field", list(courses_data.keys()))
+    location = st.text_input("Enter your city (for internships)", "")
+
+    if uploaded_file:
+        text = extract_text_from_resume(uploaded_file)
+        st.subheader("📑 Resume Analysis")
+        missing = analyze_resume(text)
+        if missing:
+            st.warning("⚠️ Gaps Found in Resume:")
+            for m in missing:
+                st.write(f"- {m}")
         else:
-            text = docx2txt.process(uploaded)
+            st.success("✅ Your resume looks strong!")
 
-        st.subheader("Resume Analysis 🔍")
-        issues, suggestions = analyze_resume(text, field)
+        # ---------- Recommended Courses ----------
+        st.subheader("🎓 Recommended Courses")
+        for c in courses_data.get(field, []):
+            st.markdown(f"**[{c['title']}]({c['link']})**")
+            st.write(f"📝 Requirements: {c['requirements']}")
+            st.write(f"📅 Start: {c['start']} → {c['end']}")
+            st.write("---")
 
-        if issues:
-            st.error("Weaknesses Found:")
-            for i in issues:
-                st.write("- ", i)
-        else:
-            st.success("Your resume looks strong!")
+        # ---------- Recommended Internships ----------
+        st.subheader("💼 Recommended Internships")
+        for i in internships_data.get(field, []):
+            if location.lower() in i["location"].lower() or location == "":
+                st.markdown(f"**{i['title']}** at **{i['company']}** ({i['location']})")
+                st.write(f"💰 Stipend: {i['stipend']}")
+                st.write(f"📝 Requirements: {i['requirements']}")
+                st.write(f"📅 Apply: {i['start']} → {i['end']}")
+                st.markdown(f"[Apply Here]({i['link']})")
+                st.write("---")
 
-        st.info("Suggestions for Improvement:")
-        for s in suggestions:
-            st.write("✅ ", s)
-
-# ---------------- COURSES & INTERNSHIPS ---------------- #
-elif menu == "Courses & Internships":
-    st.header("📚 Courses & Internships")
-    field = st.selectbox("Choose your field:", ["Technology", "Sports", "Medical", "Business"])
-
-    st.subheader("Recommended Courses")
-    for c in courses[field]:
-        st.write("📘", c)
-
-    st.subheader("Internships")
-    for i in internships[field]:
-        st.write("💼", i)
-
-# ---------------- EVENTS & COMPETITIONS ---------------- #
-elif menu == "Events & Competitions":
-    st.header("🏆 Events & Competitions")
-    field = st.selectbox("Select your field:", ["Technology", "Sports", "Medical", "Business"])
-
-    events = get_events(field)
-    for e in events:
-        st.markdown(f"### {e['name']} ({e['date']})")
-        st.write(e["desc"])
-        st.markdown(f"[🔗 Register Here]({e['link']})")
-
-# ---------------- CAREER TIPS BOT ---------------- #
-elif menu == "Career Tips Bot":
-    st.header("🤖 AI Career Assistant")
-    query = st.text_input("Ask me anything about careers (skills, jobs, tips)...")
-    if query:
-        responses = [
-            "Focus on building projects to showcase your skills.",
-            "Networking on LinkedIn can open hidden opportunities.",
-            "Consistency in learning is more important than speed."
-        ]
-        st.write("💡", random.choice(responses))
-
-# ---------------- RESOURCES ---------------- #
-elif menu == "Resources":
-    st.header("🌐 Career Resources Hub")
-    st.write("📄 Resume Templates: [Canva](https://www.canva.com/resumes/templates/)")
-    st.write("💻 Freelancing: [Upwork](https://upwork.com), [Fiverr](https://fiverr.com)")
-    st.write("🎓 Scholarships: [DAAD](https://daad.de), [Chevening](https://chevening.org)")
-    st.write("🏆 Competitions: [Kaggle](https://kaggle.com), [Devpost](https://devpost.com)")
-
-st.markdown("---")
-st.caption("⚠️ Disclaimer: This is a career guidance tool. Always verify details from official sources before applying.")
+if __name__ == "__main__":
+    main()
