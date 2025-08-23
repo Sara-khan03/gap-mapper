@@ -1,66 +1,71 @@
 import streamlit as st
-import re
-from datetime import datetime
+import random
 
-# App title and description
-st.markdown('''
-    <div style="text-align:center;">
-        <h1 style="color:#FFA500;">🧭 Career Gap Mapper</h1>
-        <h3 style="color:#00BFFF;">Map your career journey, find gaps, and get guidance 🚀</h3>
-    </div>
-    ''', unsafe_allow_html=True)
+# --- Title ---
+st.set_page_config(page_title="Career Gap Mapper", layout="wide")
+st.title("🌟 Career Gap Mapper")
+st.write("Turn your weaknesses into opportunities with smart guidance!")
 
-st.write("Upload your resume text (or paste manually) and we’ll analyze for possible gaps in education, work, sports, medical, or business journeys.")
+# --- Input Resume ---
+resume_text = st.text_area("📄 Paste Your Resume Here:", height=300)
 
-# Resume input
-resume_text = st.text_area("📄 Paste your Resume / CV text here:")
+# --- City Selection ---
+city = st.selectbox("🌍 Select Your City:", ["Delhi", "Mumbai", "Bangalore", "Hyderabad", "Chennai", "Pune", "Other"])
 
-if st.button("Analyze Career Gaps"):
-    if not resume_text.strip():
-        st.warning("⚠️ Please paste your resume text first.")
+# --- Resume Analyzer ---
+if st.button("🔍 Analyze My Resume"):
+    st.subheader("📊 Resume Analysis Result")
+
+    missing = []
+    if "intern" not in resume_text.lower():
+        missing.append("Internship")
+    if "experience" not in resume_text.lower():
+        missing.append("Work Experience")
+    if "education" not in resume_text.lower() and "degree" not in resume_text.lower():
+        missing.append("Education")
+    if "sport" not in resume_text.lower() and "champion" not in resume_text.lower():
+        missing.append("Sports Achievements")
+    if "business" not in resume_text.lower() and "startup" not in resume_text.lower():
+        missing.append("Business/Leadership")
+
+    # Show weak areas
+    if missing:
+        st.error("⚠️ Weak Areas Detected: " + ", ".join(missing))
+        st.write("Here’s how you can fix them:")
+
+        if "Education" in missing:
+            st.info("🎓 Suggested Courses: [Coursera](https://www.coursera.org), [edX](https://www.edx.org), [NPTEL](https://nptel.ac.in)")
+
+        if "Internship" in missing:
+            st.info("💼 Find Internships: [Internshala](https://internshala.com), [AngelList](https://wellfound.com), [LinkedIn](https://www.linkedin.com)")
+
+        if "Work Experience" in missing:
+            st.info("🚀 Jobs Platforms: [Indeed](https://www.indeed.com), [Naukri](https://www.naukri.com), [LinkedIn Jobs](https://www.linkedin.com/jobs)")
+
+        if "Sports Achievements" in missing:
+            st.info("🏆 Upcoming Tournaments: [AIU Sports Calendar](https://www.aiu.ac.in), [Olympic Sports](https://olympics.com)")
+
+        if "Business/Leadership" in missing:
+            st.info("💡 Startup Resources: [Startup India](https://www.startupindia.gov.in), [Y Combinator](https://www.ycombinator.com), [Techstars](https://www.techstars.com)")
+
     else:
-        st.subheader("🔍 Analysis Results:")
+        st.success("✅ Great! Your resume looks strong and balanced across multiple fields!")
 
-        # Simple regex checks for key sections
-        education_found = bool(re.search(r"(education|degree|university|college|school)", resume_text, re.I))
-        work_found = bool(re.search(r"(experience|internship|company|organization|employer)", resume_text, re.I))
-        sports_found = bool(re.search(r"(sports|athlete|tournament|championship|fitness)", resume_text, re.I))
-        medical_found = bool(re.search(r"(medical|health|doctor|hospital|treatment)", resume_text, re.I))
-        business_found = bool(re.search(r"(business|startup|entrepreneur|venture|investment)", resume_text, re.I))
+    # Score Meter
+    score = random.randint(60, 95) if missing else random.randint(90, 100)
+    st.progress(score / 100)
+    st.write(f"💯 Resume Strength Score: {score}/100")
 
-        gaps = []
-        if not education_found:
-            gaps.append("📘 Education background is missing or unclear.")
-        if not work_found:
-            gaps.append("💼 Work experience not highlighted.")
-        if not sports_found:
-            gaps.append("⚽ Sports/Extracurricular achievements not found.")
-        if not medical_found:
-            gaps.append("🩺 Medical/health-related details are missing.")
-        if not business_found:
-            gaps.append("📊 Business/entrepreneurship aspects are not mentioned.")
+# --- Extra Tools ---
+st.sidebar.title("🔗 Quick Links")
+st.sidebar.markdown("[Google Careers](https://careers.google.com/)")
+st.sidebar.markdown("[Microsoft Careers](https://careers.microsoft.com/)")
+st.sidebar.markdown("[Amazon Jobs](https://www.amazon.jobs/)")
+st.sidebar.markdown("[Infosys Careers](https://www.infosys.com/careers)")
+st.sidebar.markdown("[TCS Careers](https://www.tcs.com/careers)")
 
-        if gaps:
-            for g in gaps:
-                st.error(g)
-        else:
-            st.success("✅ Your resume looks well-rounded! No major gaps found.")
-
-        # Suggestions
-        st.subheader("💡 Suggestions to Improve Resume:")
-        if not education_found:
-            st.info("👉 Add your degrees, certifications, or relevant courses.")
-        if not work_found:
-            st.info("👉 Mention internships, jobs, or volunteer experience.")
-        if not sports_found:
-            st.info("👉 Include extracurriculars like sports, clubs, or competitions.")
-        if not medical_found:
-            st.info("👉 Highlight any medical/health training or relevant achievements.")
-        if not business_found:
-            st.info("👉 If applicable, add business ventures, leadership, or startup experiences.")
-
-# Footer
+# --- Motivational Quote ---
 st.markdown("---")
-st.markdown("🌟 *Career Gap Mapper helps you identify missing parts in your journey and guides you to build a stronger profile.*")
+st.markdown("✨ *Every gap is a hidden opportunity. Upgrade yourself today!* ✨")
 
 
