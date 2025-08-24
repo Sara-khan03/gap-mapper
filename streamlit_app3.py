@@ -1,184 +1,149 @@
 import streamlit as st
-import pandas as pd
-import random
 import pdfplumber
 import docx2txt
+import requests
+from bs4 import BeautifulSoup
 
-# --- Load cities dataset ---
-@st.cache_data
-def load_cities():
-    df = pd.read_csv("https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv")
-    return df
+# ------------------ Helper Functions ------------------
 
-cities_df = load_cities()
-
-# --- Sidebar Navigation ---
-st.sidebar.title("🌟 Career Gap Mapper")
-page = st.sidebar.radio("Navigate", [
-    "🏠 Home + Resume Analyzer",
-    "📚 Courses & Internships",
-    "🎯 Events & Competitions",
-    "🗺 Career Roadmap",
-    "🤖 Career Tips Bot",
-    "📂 Resources"
-])
-
-# --- Location Selection ---
-st.sidebar.subheader("🌍 Select Location")
-countries = sorted(cities_df['country'].unique())
-selected_country = st.sidebar.selectbox("Select your country:", countries)
-
-filtered_cities = cities_df[cities_df['country'] == selected_country]
-selected_city = st.sidebar.selectbox("Select your city:", filtered_cities['name'].unique())
-
-st.sidebar.success(f"📍 {selected_city}, {selected_country}")
-
-# --- Resume Analyzer Function ---
-def analyze_resume(text, field):
-    weaknesses = []
-    recommendations = []
-
-    if field == "tech":
-        if "python" not in text.lower():
-            weaknesses.append("Python missing")
-            recommendations.append("Learn Python – free on Kaggle or paid on Coursera.")
-        if "internship" not in text.lower():
-            weaknesses.append("No internship")
-            recommendations.append("Apply on Internshala, AngelList, or LinkedIn.")
-    elif field == "sports":
-        if "championship" not in text.lower():
-            weaknesses.append("No championships mentioned")
-            recommendations.append("Register for Khelo India or district-level tournaments.")
-    elif field == "medical":
-        if "clinical" not in text.lower():
-            weaknesses.append("No clinical exposure")
-            recommendations.append("Join clinical volunteering or hospital internships.")
-    elif field == "business":
-        if "finance" not in text.lower():
-            weaknesses.append("Finance missing")
-            recommendations.append("Take CFA basics or free YouTube finance courses.")
-
-    return weaknesses, recommendations
-
-# --- Extract text from file ---
-def extract_text(uploaded_file):
+def extract_text_from_resume(uploaded_file):
     if uploaded_file.type == "application/pdf":
         with pdfplumber.open(uploaded_file) as pdf:
-            return "\n".join([page.extract_text() or "" for page in pdf.pages])
+            return "\n".join([page.extract_text() for page in pdf.pages if page.extract_text()])
     elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return docx2txt.process(uploaded_file)
-    else:  # fallback for txt
-        return uploaded_file.read().decode("utf-8", errors="ignore")
+    elif uploaded_file.type == "text/plain":
+        return uploaded_file.read().decode("utf-8")
+    else:
+        return None
 
-# --- Page: Home + Resume Analyzer ---
-if page == "🏠 Home + Resume Analyzer":
-    st.title("🏠 Career Gap Mapper + Resume Analyzer")
+def analyze_resume(text):
+    gaps = []
+    if "internship" not in text.lower():
+        gaps.append("No internships found")
+    if "project" not in text.lower():
+        gaps.append("No projects found")
+    if "certificate" not in text.lower() and "course" not in text.lower():
+        gaps.append("No certifications or courses listed")
+    if not gaps:
+        return "✅ Strong Resume!", []
+    return "⚠️ Resume has gaps", gaps
 
-    field = st.selectbox("Choose your career field:", ["tech", "sports", "medical", "business"])
-    uploaded_file = st.file_uploader("Upload your resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
+def fetch_devpost_hackathons():
+    try:
+        url = "https://devpost.com/hackathons"
+        resp = requests.get(url, timeout=10)
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        events = []
+        for card in soup.select(".card-item")[:5]:
+            name = card.select_one(".hackathon-title").get_text(strip=True)
+            link = "https://devpost.com" + card.select_one("a")["href"]
+            deadline = card.select_one(".submission-deadline").get_text(strip=True) if card.select_one(".submission-deadline") else "TBD"
+            events.append({"name": name, "link": link, "deadline": deadline})
+        return events
+    except:
+        return []
+
+# ------------------ App Layout ------------------
+
+st.set_page_config(page_title="Career Gap Mapper", layout="wide")
+
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", [
+    "🏠 Resume Analyzer",
+    "🎯 Events & Competitions",
+    "📚 Courses & Internships",
+    "🌍 Location Selector",
+    "🤖 Career Chatbot"
+])
+
+# ------------------ Resume Analyzer ------------------
+if page == "🏠 Resume Analyzer":
+    st.title("📄 Career Gap Mapper + Resume Analyzer")
+
+    uploaded_file = st.file_uploader("Upload your Resume (PDF, DOCX, or TXT)", type=["pdf", "docx", "txt"])
 
     if uploaded_file:
-        text = extract_text(uploaded_file)
-        st.text_area("📄 Resume Content", text, height=200)
+        text = extract_text_from_resume(uploaded_file)
+        if text:
+            result, gaps = analyze_resume(text)
+            st.subheader(result)
+            if gaps:
+                st.write("### Gaps Found:")
+                for g in gaps:
+                    st.warning(g)
+            else:
+                st.success("Your resume looks solid! 🚀")
 
-        weaknesses, recs = analyze_resume(text, field)
-
-        st.subheader("📉 Weaknesses Found")
-        if weaknesses:
-            for w in weaknesses:
-                st.error(f"- {w}")
-        else:
-            st.success("No major weaknesses detected!")
-
-        st.subheader("✅ Recommendations")
-        for r in recs:
-            st.info(r)
-
-# --- Page: Courses & Internships ---
-elif page == "📚 Courses & Internships":
-    st.title("📚 Recommended Courses & Internships")
-    field = st.selectbox("Choose your field:", ["tech", "sports", "medical", "business"])
-
-    if field == "tech":
-        st.subheader("Courses")
-        st.write("🔹 [CS50 (Free)](https://cs50.harvard.edu/)")
-        st.write("🔹 [Coursera: Google Data Analytics (Paid)](https://www.coursera.org/professional-certificates/google-data-analytics)")
-        st.subheader("Internships")
-        st.write("💼 LinkedIn Tech Internships – Rolling applications")
-        st.write("💼 Internshala Python/AI internships – Registration open")
-
-    elif field == "sports":
-        st.subheader("Competitions / Training")
-        st.write("🏆 Khelo India University Games – Registration till Sept 2025")
-        st.write("🏆 Asian Games qualifiers – City-based selections")
-
-    elif field == "medical":
-        st.subheader("Courses")
-        st.write("🔹 [Coursera: Anatomy Specialization (Paid)](https://www.coursera.org/specializations/anatomy)")
-        st.write("🔹 [Medscape CME (Free)](https://www.medscape.org/)")
-        st.subheader("Internships")
-        st.write("💼 Hospital volunteering – Apply directly in local hospitals")
-
-    elif field == "business":
-        st.subheader("Courses")
-        st.write("🔹 [Wharton MBA Free Courses](https://online.wharton.upenn.edu/)")
-        st.write("🔹 [Coursera: Financial Markets by Yale](https://www.coursera.org/learn/financial-markets-global)")
-        st.subheader("Internships")
-        st.write("💼 Deloitte Summer Internship – Closes Nov 2025")
-        st.write("💼 Goldman Sachs Internship – Apply till Dec 2025")
-
-# --- Page: Events & Competitions ---
+# ------------------ Events & Competitions ------------------
 elif page == "🎯 Events & Competitions":
     st.title("🎯 Upcoming Events & Competitions")
-    field = st.selectbox("Choose your field:", ["tech", "sports", "medical", "business"])
+    field = st.selectbox("Choose your field:", ["Tech", "Sports", "Medical", "Business"])
 
-    if field == "tech":
-        st.write("💻 Hackathons on [Devpost](https://devpost.com/hackathons)")
-        st.write("💻 MLH Global Hack Week – October 2025")
-    elif field == "sports":
-        st.write("⚽ Khelo India Games – State level qualifiers")
-        st.write("🏸 Badminton National Open – Registrations till Nov 2025")
-    elif field == "medical":
-        st.write("🩺 World Health Summit Asia – Feb 2026, Singapore")
-        st.write("🩺 Indian Medical Congress – Delhi, March 2026")
-    elif field == "business":
-        st.write("📊 Startup India Innovation Summit – Jan 2026, Mumbai")
-        st.write("📊 TiE Global Pitch Fest – Online, Rolling entries")
+    if field == "Tech":
+        st.subheader("💻 Live Hackathons (Devpost)")
+        events = fetch_devpost_hackathons()
+        if events:
+            for e in events:
+                st.markdown(f"**[{e['name']}]({e['link']})** – Deadline: {e['deadline']}")
+        else:
+            st.warning("⚠️ Could not fetch live hackathons. Showing fallback list.")
+            st.write("- AI Hackathon (Nov 2025)")
+            st.write("- Global Dev Challenge (Dec 2025)")
 
-# --- Page: Career Roadmap ---
-elif page == "🗺 Career Roadmap":
-    st.title("🗺 Career Roadmap")
-    st.info("🚀 Your step-by-step personalized career roadmap will be displayed here (future upgrade).")
+    elif field == "Sports":
+        st.subheader("🏆 Sports Competitions")
+        st.write("- National Athletics Championship – Reg: Oct 2025 – [Register Here](https://www.indianathletics.in/)")
+        st.write("- Football League Trials – Reg: Nov 2025 – [Details](https://www.the-aiff.com/)")
 
-# --- Page: Career Tips Bot ---
-elif page == "🤖 Career Tips Bot":
+    elif field == "Medical":
+        st.subheader("🩺 Medical Conferences & Research Events")
+        st.write("- World Medical Innovation Forum – May 2026 – [Register](https://worldmedicalinnovation.org/)")
+        st.write("- Indian Medical Research Conference – Feb 2026 – [Details](https://icmr.nic.in/)")
+
+    elif field == "Business":
+        st.subheader("📊 Business & Entrepreneurship Events")
+        st.write("- Startup India Innovation Summit – Jan 2026 – [Register](https://www.startupindia.gov.in/)")
+        st.write("- Global Entrepreneurs Conference – Mar 2026 – [Details](https://www.ges2025.org/)")
+
+# ------------------ Courses & Internships ------------------
+elif page == "📚 Courses & Internships":
+    st.title("📚 Recommended Courses & Internships")
+    st.write("We recommend based on gaps in your resume")
+
+    st.subheader("🎓 Courses")
+    st.write("- [Coursera: Data Science Specialization](https://www.coursera.org/) – Paid – Reg closes Dec 2025")
+    st.write("- [edX: Business Management](https://www.edx.org/) – Free – Reg closes Jan 2026")
+    st.write("- [Udemy: Full Stack Development](https://www.udemy.com/) – Paid – Ongoing")
+
+    st.subheader("💼 Internships")
+    st.write("- Google STEP Internship – Apply by Nov 2025 – [Apply Here](https://careers.google.com/)")
+    st.write("- WHO Public Health Internship – Apply by Dec 2025 – [Apply](https://www.who.int/careers)")
+    st.write("- Sports Analytics Intern @ ESPN – Apply by Jan 2026 – [Details](https://espncareers.com/)")
+
+# ------------------ Location Selector ------------------
+elif page == "🌍 Location Selector":
+    st.title("🌍 Select Your Location")
+    country = st.selectbox("Choose your country:", ["India", "USA", "UK"])
+    if country == "India":
+        city = st.selectbox("Choose your city:", ["Delhi", "Mumbai", "Bengaluru", "Chennai"])
+    elif country == "USA":
+        city = st.selectbox("Choose your city:", ["New York", "San Francisco", "Chicago"])
+    elif country == "UK":
+        city = st.selectbox("Choose your city:", ["London", "Manchester", "Birmingham"])
+    st.success(f"✅ You selected: {city}, {country}")
+
+# ------------------ Chatbot ------------------
+elif page == "🤖 Career Chatbot":
     st.title("🤖 Career Tips Bot")
-    field = st.selectbox("Select your field:", ["tech", "sports", "medical", "business"])
-    user_q = st.text_input("Ask me about your career:")
+    user_input = st.text_input("Ask me anything about your career:")
 
-    def career_bot(question, field):
-        q = question.lower()
-        if field == "tech":
-            if "internship" in q:
-                return "Search on LinkedIn, Internshala, and AngelList – tech startups hire year-round."
-            elif "course" in q:
-                return "Try CS50 (free) or Google Cloud Certification."
-            else:
-                return "Build projects, open-source, and grow your GitHub!"
-        elif field == "sports":
-            return "Focus on upcoming competitions like Khelo India and local leagues."
-        elif field == "medical":
-            return "Attend medical conferences, do hospital internships, and keep learning via CME."
-        elif field == "business":
-            return "Networking + MBA/Masters + internships at Deloitte/GS can help."
-        return "Please choose your field for more precise tips!"
-
-    if user_q:
-        st.info(career_bot(user_q, field))
-
-# --- Page: Resources ---
-elif page == "📂 Resources":
-    st.title("📂 Resources")
-    st.write("📘 Free Resume Templates: [Canva](https://www.canva.com/resumes/templates/)")
-    st.write("📘 Job Boards: [LinkedIn](https://linkedin.com), [Indeed](https://indeed.com)")
-    st.write("📘 Learning Platforms: [Coursera](https://coursera.org), [edX](https://edx.org)")
+    if user_input:
+        if "internship" in user_input.lower():
+            st.info("💡 Internships boost your resume. Check '📚 Courses & Internships' for live opportunities.")
+        elif "course" in user_input.lower():
+            st.info("📚 Upskill with free & paid courses. See recommendations in the Courses page.")
+        elif "competition" in user_input.lower():
+            st.info("🏆 Competitions can give exposure! See '🎯 Events & Competitions'.")
+        else:
+            st.info("I suggest improving your resume by adding projects, internships, and certifications.")
