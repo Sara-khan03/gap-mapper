@@ -2,4 +2,3 @@ streamlit
 pdfplumber
 docx2txt
 requests
-
