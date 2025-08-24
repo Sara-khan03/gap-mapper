@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import random
+import pdfplumber
+import docx2txt
 
-# Load cities dataset
+# --- Load cities dataset ---
 @st.cache_data
 def load_cities():
     df = pd.read_csv("https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv")
@@ -21,7 +23,7 @@ page = st.sidebar.radio("Navigate", [
     "📂 Resources"
 ])
 
-# --- Location Selection (Global Improvement) ---
+# --- Location Selection ---
 st.sidebar.subheader("🌍 Select Location")
 countries = sorted(cities_df['country'].unique())
 selected_country = st.sidebar.selectbox("Select your country:", countries)
@@ -31,7 +33,7 @@ selected_city = st.sidebar.selectbox("Select your city:", filtered_cities['name'
 
 st.sidebar.success(f"📍 {selected_city}, {selected_country}")
 
-# --- Fake Resume Analyzer (basic keyword check) ---
+# --- Resume Analyzer Function ---
 def analyze_resume(text, field):
     weaknesses = []
     recommendations = []
@@ -58,16 +60,25 @@ def analyze_resume(text, field):
 
     return weaknesses, recommendations
 
+# --- Extract text from file ---
+def extract_text(uploaded_file):
+    if uploaded_file.type == "application/pdf":
+        with pdfplumber.open(uploaded_file) as pdf:
+            return "\n".join([page.extract_text() or "" for page in pdf.pages])
+    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        return docx2txt.process(uploaded_file)
+    else:  # fallback for txt
+        return uploaded_file.read().decode("utf-8", errors="ignore")
 
 # --- Page: Home + Resume Analyzer ---
 if page == "🏠 Home + Resume Analyzer":
     st.title("🏠 Career Gap Mapper + Resume Analyzer")
 
     field = st.selectbox("Choose your career field:", ["tech", "sports", "medical", "business"])
-    uploaded_file = st.file_uploader("Upload your resume (TXT or PDF for demo)", type=["txt"])
+    uploaded_file = st.file_uploader("Upload your resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
 
     if uploaded_file:
-        text = uploaded_file.read().decode("utf-8", errors="ignore")
+        text = extract_text(uploaded_file)
         st.text_area("📄 Resume Content", text, height=200)
 
         weaknesses, recs = analyze_resume(text, field)
@@ -83,11 +94,9 @@ if page == "🏠 Home + Resume Analyzer":
         for r in recs:
             st.info(r)
 
-
 # --- Page: Courses & Internships ---
 elif page == "📚 Courses & Internships":
     st.title("📚 Recommended Courses & Internships")
-
     field = st.selectbox("Choose your field:", ["tech", "sports", "medical", "business"])
 
     if field == "tech":
@@ -118,40 +127,32 @@ elif page == "📚 Courses & Internships":
         st.write("💼 Deloitte Summer Internship – Closes Nov 2025")
         st.write("💼 Goldman Sachs Internship – Apply till Dec 2025")
 
-
 # --- Page: Events & Competitions ---
 elif page == "🎯 Events & Competitions":
     st.title("🎯 Upcoming Events & Competitions")
-
     field = st.selectbox("Choose your field:", ["tech", "sports", "medical", "business"])
 
     if field == "tech":
         st.write("💻 Hackathons on [Devpost](https://devpost.com/hackathons)")
         st.write("💻 MLH Global Hack Week – October 2025")
-
     elif field == "sports":
         st.write("⚽ Khelo India Games – State level qualifiers")
         st.write("🏸 Badminton National Open – Registrations till Nov 2025")
-
     elif field == "medical":
         st.write("🩺 World Health Summit Asia – Feb 2026, Singapore")
         st.write("🩺 Indian Medical Congress – Delhi, March 2026")
-
     elif field == "business":
         st.write("📊 Startup India Innovation Summit – Jan 2026, Mumbai")
         st.write("📊 TiE Global Pitch Fest – Online, Rolling entries")
-
 
 # --- Page: Career Roadmap ---
 elif page == "🗺 Career Roadmap":
     st.title("🗺 Career Roadmap")
     st.info("🚀 Your step-by-step personalized career roadmap will be displayed here (future upgrade).")
 
-
 # --- Page: Career Tips Bot ---
 elif page == "🤖 Career Tips Bot":
     st.title("🤖 Career Tips Bot")
-
     field = st.selectbox("Select your field:", ["tech", "sports", "medical", "business"])
     user_q = st.text_input("Ask me about your career:")
 
@@ -174,7 +175,6 @@ elif page == "🤖 Career Tips Bot":
 
     if user_q:
         st.info(career_bot(user_q, field))
-
 
 # --- Page: Resources ---
 elif page == "📂 Resources":
