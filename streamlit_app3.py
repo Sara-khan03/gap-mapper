@@ -1,11 +1,10 @@
 import streamlit as st
-import pdfplumber
-import docx2txt
 import requests
 from bs4 import BeautifulSoup
+import pdfplumber
+import docx2txt
 
-# ------------------ Helper Functions ------------------
-
+# ----------- Resume Functions -----------
 def extract_text_from_resume(uploaded_file):
     if uploaded_file.type == "application/pdf":
         with pdfplumber.open(uploaded_file) as pdf:
@@ -14,8 +13,7 @@ def extract_text_from_resume(uploaded_file):
         return docx2txt.process(uploaded_file)
     elif uploaded_file.type == "text/plain":
         return uploaded_file.read().decode("utf-8")
-    else:
-        return None
+    return None
 
 def analyze_resume(text):
     gaps = []
@@ -29,6 +27,7 @@ def analyze_resume(text):
         return "✅ Strong Resume!", []
     return "⚠️ Resume has gaps", gaps
 
+# ----------- Fetch Devpost Hackathons (Tech) -----------
 def fetch_devpost_hackathons():
     try:
         url = "https://devpost.com/hackathons"
@@ -44,10 +43,25 @@ def fetch_devpost_hackathons():
     except:
         return []
 
-# ------------------ App Layout ------------------
+# ----------- Fetch Indeed Jobs API (Internships) -----------
+def fetch_internships(query="internship", location="India"):
+    try:
+        api_url = f"https://api.indeed.com/ads/apisearch?publisher=YOUR_PUBLISHER_ID&q={query}&l={location}&format=json"
+        resp = requests.get(api_url, timeout=10).json()
+        jobs = []
+        for job in resp.get("results", [])[:5]:
+            jobs.append({
+                "title": job.get("jobtitle"),
+                "company": job.get("company"),
+                "location": job.get("formattedLocation"),
+                "url": job.get("url"),
+            })
+        return jobs
+    except:
+        return []
 
+# ----------- Streamlit Layout -----------
 st.set_page_config(page_title="Career Gap Mapper", layout="wide")
-
 st.sidebar.title("Navigation")
 page = st.sidebar.radio("Go to", [
     "🏠 Resume Analyzer",
@@ -57,12 +71,10 @@ page = st.sidebar.radio("Go to", [
     "🤖 Career Chatbot"
 ])
 
-# ------------------ Resume Analyzer ------------------
+# ----------- Resume Analyzer -----------
 if page == "🏠 Resume Analyzer":
     st.title("📄 Career Gap Mapper + Resume Analyzer")
-
-    uploaded_file = st.file_uploader("Upload your Resume (PDF, DOCX, or TXT)", type=["pdf", "docx", "txt"])
-
+    uploaded_file = st.file_uploader("Upload Resume (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"])
     if uploaded_file:
         text = extract_text_from_resume(uploaded_file)
         if text:
@@ -75,7 +87,7 @@ if page == "🏠 Resume Analyzer":
             else:
                 st.success("Your resume looks solid! 🚀")
 
-# ------------------ Events & Competitions ------------------
+# ----------- Events & Competitions -----------
 elif page == "🎯 Events & Competitions":
     st.title("🎯 Upcoming Events & Competitions")
     field = st.selectbox("Choose your field:", ["Tech", "Sports", "Medical", "Business"])
@@ -87,41 +99,43 @@ elif page == "🎯 Events & Competitions":
             for e in events:
                 st.markdown(f"**[{e['name']}]({e['link']})** – Deadline: {e['deadline']}")
         else:
-            st.warning("⚠️ Could not fetch live hackathons. Showing fallback list.")
-            st.write("- AI Hackathon (Nov 2025)")
-            st.write("- Global Dev Challenge (Dec 2025)")
+            st.warning("⚠️ Could not fetch live hackathons.")
 
     elif field == "Sports":
         st.subheader("🏆 Sports Competitions")
-        st.write("- National Athletics Championship – Reg: Oct 2025 – [Register Here](https://www.indianathletics.in/)")
-        st.write("- Football League Trials – Reg: Nov 2025 – [Details](https://www.the-aiff.com/)")
+        st.write("- National Athletics Championship – Oct 2025 – [Register](https://www.indianathletics.in/)")
+        st.write("- Football League Trials – Nov 2025 – [Details](https://www.the-aiff.com/)")
 
     elif field == "Medical":
-        st.subheader("🩺 Medical Conferences & Research Events")
+        st.subheader("🩺 Medical Conferences")
         st.write("- World Medical Innovation Forum – May 2026 – [Register](https://worldmedicalinnovation.org/)")
         st.write("- Indian Medical Research Conference – Feb 2026 – [Details](https://icmr.nic.in/)")
 
     elif field == "Business":
-        st.subheader("📊 Business & Entrepreneurship Events")
+        st.subheader("📊 Business Events")
         st.write("- Startup India Innovation Summit – Jan 2026 – [Register](https://www.startupindia.gov.in/)")
         st.write("- Global Entrepreneurs Conference – Mar 2026 – [Details](https://www.ges2025.org/)")
 
-# ------------------ Courses & Internships ------------------
+# ----------- Courses & Internships -----------
 elif page == "📚 Courses & Internships":
     st.title("📚 Recommended Courses & Internships")
-    st.write("We recommend based on gaps in your resume")
 
     st.subheader("🎓 Courses")
     st.write("- [Coursera: Data Science Specialization](https://www.coursera.org/) – Paid – Reg closes Dec 2025")
     st.write("- [edX: Business Management](https://www.edx.org/) – Free – Reg closes Jan 2026")
     st.write("- [Udemy: Full Stack Development](https://www.udemy.com/) – Paid – Ongoing")
 
-    st.subheader("💼 Internships")
-    st.write("- Google STEP Internship – Apply by Nov 2025 – [Apply Here](https://careers.google.com/)")
-    st.write("- WHO Public Health Internship – Apply by Dec 2025 – [Apply](https://www.who.int/careers)")
-    st.write("- Sports Analytics Intern @ ESPN – Apply by Jan 2026 – [Details](https://espncareers.com/)")
+    st.subheader("💼 Live Internships (via Indeed API)")
+    internships = fetch_internships("internship", "India")
+    if internships:
+        for job in internships:
+            st.markdown(f"**{job['title']}** at {job['company']} – {job['location']} → [Apply Here]({job['url']})")
+    else:
+        st.warning("⚠️ Could not fetch live internships. Showing fallback list.")
+        st.write("- Google STEP Internship – Nov 2025")
+        st.write("- WHO Public Health Internship – Dec 2025")
 
-# ------------------ Location Selector ------------------
+# ----------- Location Selector -----------
 elif page == "🌍 Location Selector":
     st.title("🌍 Select Your Location")
     country = st.selectbox("Choose your country:", ["India", "USA", "UK"])
@@ -133,17 +147,17 @@ elif page == "🌍 Location Selector":
         city = st.selectbox("Choose your city:", ["London", "Manchester", "Birmingham"])
     st.success(f"✅ You selected: {city}, {country}")
 
-# ------------------ Chatbot ------------------
+# ----------- Career Chatbot -----------
 elif page == "🤖 Career Chatbot":
     st.title("🤖 Career Tips Bot")
-    user_input = st.text_input("Ask me anything about your career:")
+    user_input = st.text_input("Ask about internships, courses, or competitions:")
 
     if user_input:
         if "internship" in user_input.lower():
-            st.info("💡 Internships boost your resume. Check '📚 Courses & Internships' for live opportunities.")
+            st.info("💡 Internships give real-world exposure. See '📚 Courses & Internships' for live listings.")
         elif "course" in user_input.lower():
-            st.info("📚 Upskill with free & paid courses. See recommendations in the Courses page.")
+            st.info("📚 Upskill with free & paid courses. Check '📚 Courses' page.")
         elif "competition" in user_input.lower():
-            st.info("🏆 Competitions can give exposure! See '🎯 Events & Competitions'.")
+            st.info("🏆 Competitions improve visibility. See '🎯 Events & Competitions'.")
         else:
-            st.info("I suggest improving your resume by adding projects, internships, and certifications.")
+            st.info("✅ Best advice: Keep learning, keep applying, and keep networking!")
