@@ -1,213 +1,62 @@
 import streamlit as st
-import pdfplumber
-import docx2txt
-from datetime import datetime
+import pandas as pd
 
-# ----------------- STATIC DATA -----------------
-courses_data = {
-    "Technology": [
-        {"title": "Python for Everybody (Free)", "link": "https://www.coursera.org/specializations/python", 
-         "requirements": "Beginner friendly", "start": "Anytime", "end": "Self-paced"},
-        {"title": "Data Science Certificate (Paid)", "link": "https://www.coursera.org/professional-certificates/ibm-data-science", 
-         "requirements": "Basic Python", "start": "2025-09-01", "end": "2026-01-01"},
-    ],
-    "Business": [
-        {"title": "Intro to Business (Free)", "link": "https://online.hbs.edu", 
-         "requirements": "None", "start": "Anytime", "end": "Self-paced"},
-        {"title": "Wharton Strategy (Paid)", "link": "https://www.coursera.org/specializations/wharton-strategy", 
-         "requirements": "Bachelor’s degree preferred", "start": "2025-10-01", "end": "2026-02-01"},
-    ],
-    "Medical": [
-        {"title": "Basics of Clinical Research", "link": "https://nptel.ac.in", 
-         "requirements": "Medical/Science background", "start": "2025-09-15", "end": "2026-01-30"},
-    ],
-    "Law": [
-        {"title": "International Law (Free)", "link": "https://www.coursera.org/learn/international-law", 
-         "requirements": "None", "start": "Anytime", "end": "Self-paced"},
-    ],
-    "Arts & Design": [
-        {"title": "Graphic Design Specialization", "link": "https://www.coursera.org/specializations/graphic-design", 
-         "requirements": "Creativity & computer access", "start": "Anytime", "end": "Self-paced"},
-    ]
-}
+# Load world cities (CSV should be in repo or use external dataset)
+@st.cache_data
+def load_cities():
+    df = pd.read_csv("https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv")
+    return df
 
-internships_data = {
-    "Technology": [
-        {"title": "Web Development Intern", "company": "Google", "location": "Bangalore", 
-         "stipend": "₹20,000/month", "requirements": "HTML, CSS, JS", 
-         "start": "2025-09-01", "end": "2025-09-20", "link": "https://careers.google.com"},
-    ],
-    "Business": [
-        {"title": "Marketing Intern", "company": "Unilever", "location": "Mumbai", 
-         "stipend": "₹15,000/month", "requirements": "MBA Student", 
-         "start": "2025-09-05", "end": "2025-09-25", "link": "https://unilever.com/careers"},
-    ],
-    "Medical": [
-        {"title": "Clinical Research Intern", "company": "AIIMS", "location": "Delhi", 
-         "stipend": "₹10,000/month", "requirements": "Medical student", 
-         "start": "2025-09-10", "end": "2025-09-30", "link": "https://aiims.edu"},
-    ]
-}
+cities_df = load_cities()
 
-competitions_data = {
-    "Technology": [
-        {"name": "Kaggle ML Competition", "details": "Work on real-world ML problems.", 
-         "deadline": "2025-09-30", "link": "https://www.kaggle.com"},
-        {"name": "Devpost Hackathon", "details": "Build innovative apps in 48 hours.", 
-         "deadline": "2025-10-15", "link": "https://devpost.com"},
-    ],
-    "Business": [
-        {"name": "Hult Prize", "details": "Global business case competition.", 
-         "deadline": "2025-09-20", "link": "https://hultprize.org"},
-        {"name": "BCG Strategy Challenge", "details": "Solve consulting business cases.", 
-         "deadline": "2025-10-10", "link": "https://bcg.com"},
-    ],
-    "Medical": [
-        {"name": "WHO Health Research Summit", "details": "Present research papers.", 
-         "deadline": "2025-11-01", "link": "https://who.int"},
-    ],
-    "Sports": [
-        {"name": "National Athletics Championship", "details": "Compete at national level.", 
-         "deadline": "2025-09-20", "link": "https://sportsauthorityofindia.nic.in"},
-        {"name": "State Football Trials", "details": "Selection for state team.", 
-         "deadline": "2025-09-30", "link": "https://aiff.com"},
-    ],
-    "Law": [
-        {"name": "Moot Court Competition", "details": "Argue simulated legal cases.", 
-         "deadline": "2025-10-05", "link": "https://barcouncilofindia.org"},
-    ],
-    "Arts & Design": [
-        {"name": "Adobe Design Contest", "details": "Submit your creative portfolios.", 
-         "deadline": "2025-09-25", "link": "https://adobe.com"},
-    ]
-}
+st.title("🌍 Career Gap Mapper")
 
-# ----------------- HELPER FUNCTIONS -----------------
-def extract_text_from_resume(uploaded_file):
-    text = ""
-    if uploaded_file.name.endswith(".pdf"):
-        with pdfplumber.open(uploaded_file) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() or ""
-    elif uploaded_file.name.endswith(".docx"):
-        text = docx2txt.process(uploaded_file)
-    return text.lower()
+# --- City selection ---
+st.subheader("Enter Your City")
+selected_city = st.selectbox("Select your city:", cities_df['name'].unique())
 
-def analyze_resume(text, field):
-    missing = []
-    if field == "Sports":
-        if "competition" not in text and "tournament" not in text:
-            missing.append("Sports achievements/competitions not highlighted")
+if selected_city:
+    city_data = cities_df[cities_df['name'] == selected_city].iloc[0]
+    st.success(f"📍 You selected: {city_data['name']}, {city_data['country']}")
+
+# --- Chatbot ---
+st.subheader("💬 Career Tips Bot")
+
+user_question = st.text_input("Ask me anything about your career:")
+
+def career_bot_response(question, field):
+    q = question.lower()
+    if field == "tech":
+        if "internship" in q:
+            return "You can find great internships on Internshala, LinkedIn, and AngelList. Startups are actively hiring!"
+        elif "event" in q or "hackathon" in q:
+            return "Check out Devpost and MLH Hackathons – amazing for networking and projects!"
+        else:
+            return "For tech, focus on building projects, GitHub profile, and certifications (AWS, Google Cloud)."
+    
+    elif field == "sports":
+        if "competition" in q:
+            return "Look into Khelo India, National Sports Championships, and upcoming Asian Games qualifiers."
+        else:
+            return "Sports careers grow with discipline and networking. Connect with your local sports federation."
+
+    elif field == "medical":
+        if "conference" in q:
+            return "Upcoming medical conferences: Indian Medical Congress, World Health Summit Asia."
+        else:
+            return "Focus on continuous learning. NEET-PG prep or short courses on Coursera/Medscape are great."
+
+    elif field == "business":
+        if "internship" in q:
+            return "Try Goldman Sachs, Deloitte, or startup incubators in your city."
+        else:
+            return "Business careers thrive on networking. Attend TiE Global, Startup India events, or local pitch fests."
+
     else:
-        if "internship" not in text:
-            missing.append("Internship experience")
-        if "project" not in text:
-            missing.append("Project experience")
-    return missing
+        return "Tell me your field (tech, sports, medical, business) so I can guide you better."
 
-def career_tips_bot(user_input, field):
-    response = ""
-    if field == "Technology":
-        if "project" in user_input:
-            response = "Work on open-source projects on GitHub to showcase your coding skills."
-        elif "internship" in user_input:
-            response = "Apply on platforms like Internshala, AngelList, and LinkedIn. Build side projects to stand out."
-        else:
-            response = "Stay updated with tech trends, participate in hackathons, and strengthen your DSA skills."
-    elif field == "Sports":
-        if "training" in user_input:
-            response = "Join local academies and register with state sports associations for advanced training."
-        elif "competition" in user_input:
-            response = "Start with district-level competitions, then progress to state and national tournaments."
-        else:
-            response = "Maintain a regular fitness schedule, track your performance, and seek mentorship from coaches."
-    elif field == "Business":
-        response = "Engage in case study competitions, improve networking skills, and follow Harvard Business Review insights."
-    elif field == "Medical":
-        response = "Participate in medical conferences, publish research, and join clinical internships for practical exposure."
-    elif field == "Law":
-        response = "Join moot courts, publish legal articles, and follow judgments from top courts to build knowledge."
-    elif field == "Arts & Design":
-        response = "Build a strong portfolio, participate in online design challenges, and stay creative every day."
-    else:
-        response = "Keep learning, building, and networking in your chosen field."
-    return response
+# For demo, assume field is chosen already
+user_field = st.selectbox("Choose your field:", ["tech", "sports", "medical", "business"])
 
-# ----------------- STREAMLIT APP -----------------
-def main():
-    st.set_page_config(page_title="Career Gap Mapper", layout="wide")
-
-    # Sidebar Navigation
-    st.sidebar.title("📌 Navigation")
-    page = st.sidebar.radio("Go to", ["Home", "Courses & Internships", "Events & Competitions", "Career Tips Bot"])
-
-    # -------------- Home --------------
-    if page == "Home":
-        st.title("🧭 Career Gap Mapper")
-        st.write("Upload your resume & get personalized career roadmap.")
-
-        uploaded_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
-        field = st.selectbox("Select your career field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
-        location = st.text_input("Enter your city (for internships)", "")
-
-        if uploaded_file:
-            text = extract_text_from_resume(uploaded_file)
-            st.subheader("📑 Resume Analysis")
-            missing = analyze_resume(text, field)
-            if missing:
-                st.warning("⚠️ Gaps Found in Resume:")
-                for m in missing:
-                    st.write(f"- {m}")
-            else:
-                st.success("✅ Your resume looks strong!")
-
-    # -------------- Courses & Internships --------------
-    elif page == "Courses & Internships":
-        st.title("🎓 Recommended Courses & Internships")
-        field = st.selectbox("Select your field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
-        location = st.text_input("Enter city (for internships)", "")
-
-        if field == "Sports":
-            st.info("⚽ For Sports, internships are not relevant. Please check Competitions page instead.")
-        else:
-            st.subheader("Courses")
-            for c in courses_data.get(field, []):
-                st.markdown(f"**[{c['title']}]({c['link']})**")
-                st.write(f"📝 Requirements: {c['requirements']}")
-                st.write(f"📅 {c['start']} → {c['end']}")
-                st.write("---")
-
-            st.subheader("Internships")
-            for i in internships_data.get(field, []):
-                if location.lower() in i["location"].lower() or location == "":
-                    st.markdown(f"**{i['title']}** at **{i['company']}** ({i['location']})")
-                    st.write(f"💰 Stipend: {i['stipend']}")
-                    st.write(f"📝 Requirements: {i['requirements']}")
-                    st.write(f"📅 Apply: {i['start']} → {i['end']}")
-                    st.markdown(f"[Apply Here]({i['link']})")
-                    st.write("---")
-
-    # -------------- Events & Competitions --------------
-    elif page == "Events & Competitions":
-        st.title("🏆 Events & Competitions")
-        field = st.selectbox("Select your field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
-
-        for e in competitions_data.get(field, []):
-            st.markdown(f"**[{e['name']}]({e['link']})**")
-            st.write(f"📄 {e['details']}")
-            st.write(f"📅 Registration Deadline: {e['deadline']}")
-            st.write("---")
-
-    # -------------- Career Tips Bot --------------
-    elif page == "Career Tips Bot":
-        st.title("🤖 Career Tips Bot")
-        field = st.selectbox("Select your field", ["Technology","Business","Medical","Sports","Law","Arts & Design"])
-        user_input = st.text_input("Ask a career-related question:")
-
-        if user_input:
-            response = career_tips_bot(user_input.lower(), field)
-            st.success(f"💡 {response}")
-
-if __name__ == "__main__":
-    main()
-
+if user_question:
+    st.info(career_bot_response(user_question, user_field))
