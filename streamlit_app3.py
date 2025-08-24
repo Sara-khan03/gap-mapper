@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pdfplumber
 import docx2txt
-import os
 
 # -------------------- Sidebar Navigation --------------------
 st.sidebar.title("Career Gap Mapper")
@@ -57,47 +56,56 @@ if page == "Home & Resume Analyzer":
 elif page == "Courses & Internships":
     st.title("🎓 Recommended Courses & Internships")
     st.write("Here are some curated opportunities:")
-    
+
     st.subheader("Free Courses")
     st.markdown("- [Python for Everybody (Coursera)](https://www.coursera.org/specializations/python)")
     st.markdown("- [Intro to Machine Learning (Kaggle)](https://www.kaggle.com/learn/intro-to-machine-learning)")
-    
+    st.markdown("- [CS50’s Introduction to Computer Science (Harvard)](https://cs50.harvard.edu/x/)")
+
     st.subheader("Paid Courses")
     st.markdown("- [Full-Stack Web Development (Udemy)](https://www.udemy.com/course/the-complete-web-developer-course/)")
     st.markdown("- [AI & Deep Learning (Coursera)](https://www.coursera.org/specializations/deep-learning)")
-    
+
     st.subheader("Internships")
     st.markdown("- [Google Internship Portal](https://careers.google.com/students/)")
     st.markdown("- [Microsoft Internships](https://careers.microsoft.com/students/us/en)")
     st.markdown("- [Internshala (India)](https://internshala.com/)")
+    st.markdown("- [UNICEF Internships](https://www.unicef.org/careers/internships)")
 
 # -------------------- Events & Competitions --------------------
 elif page == "Events & Competitions":
     st.title("🏆 Events & Competitions")
     st.write("Live opportunities based on your field.")
-    
-    # Tech Example (Devpost)
-    try:
-        response = requests.get("https://devpost.com/api/hackathons?status=open")
-        data = response.json()
-        st.subheader("Tech Hackathons (from Devpost)")
-        for hack in data.get("hackathons", [])[:5]:
-            st.markdown(f"- [{hack['title']}]({hack['url']}) - Deadline: {hack.get('submission_period_dates')}")
-    except:
-        st.warning("⚠️ Could not fetch live hackathons. Showing fallback.")
-        st.markdown("- [Fallback Hackathon Example](https://devpost.com)")
 
-    # Sports Example (Static fallback for now)
+    # Tech Hackathons (Safe Fallback)
+    st.subheader("Tech Hackathons")
+    hackathons = [
+        {"title": "AI Hackathon 2025", "url": "https://devpost.com", "deadline": "30 Sep 2025"},
+        {"title": "Sustainability Challenge", "url": "https://devpost.com", "deadline": "15 Oct 2025"},
+        {"title": "Global FinTech Hackathon", "url": "https://devpost.com", "deadline": "01 Nov 2025"}
+    ]
+    for hack in hackathons:
+        st.markdown(f"- [{hack['title']}]({hack['url']}) - Deadline: {hack['deadline']}")
+
+    # Sports Example
     st.subheader("Sports Competitions")
     st.markdown("- [National Athletics Championship](https://indianathletics.in/) - July 2025")
-    st.markdown("- [State Level Football Tournament] - August 2025")
+    st.markdown("- [State Level Football Tournament](#) - August 2025")
+    st.markdown("- [All India Badminton Open](https://www.badmintonindia.org/) - Sept 2025")
 
 # -------------------- Career Tips Bot --------------------
 elif page == "Career Tips Bot":
     st.title("🤖 Career Tips Assistant")
     user_q = st.text_input("Ask me about resume, internships, or career growth:")
     if user_q:
-        st.write("✅ Tip: Stay consistent, keep updating your skills, and apply widely.")
+        if "resume" in user_q.lower():
+            st.write("📄 Tip: Tailor your resume for each job and keep it concise (1-2 pages).")
+        elif "internship" in user_q.lower():
+            st.write("💼 Tip: Start with small internships or volunteering to build experience.")
+        elif "career" in user_q.lower():
+            st.write("🚀 Tip: Keep learning continuously. Online certifications help a lot.")
+        else:
+            st.write("✅ Tip: Stay consistent, keep updating your skills, and apply widely.")
 
 # -------------------- Resources --------------------
 elif page == "Resources":
@@ -106,17 +114,25 @@ elif page == "Resources":
     st.markdown("- [FreeCodeCamp](https://www.freecodecamp.org/)")
     st.markdown("- [Khan Academy](https://www.khanacademy.org/)")
     st.markdown("- [Naukri Jobs](https://www.naukri.com/)")
+    st.markdown("- [Glassdoor](https://www.glassdoor.com/)")
+    st.markdown("- [Indeed](https://www.indeed.com/)")
 
 # -------------------- Location Selector --------------------
 elif page == "Location Selector":
     st.title("🌍 Find Opportunities Near You")
+
     country = st.selectbox("Select your country:", ["India", "USA", "UK", "Canada"])
+    
     if country == "India":
-        city = st.selectbox("Select city:", ["Delhi", "Mumbai", "Bangalore", "Chennai"])
+        city = st.selectbox("Select city:", ["Delhi", "Mumbai", "Bangalore", "Chennai", "Hyderabad"])
     elif country == "USA":
-        city = st.selectbox("Select city:", ["New York", "San Francisco", "Chicago"])
+        city = st.selectbox("Select city:", ["New York", "San Francisco", "Chicago", "Seattle"])
+    elif country == "UK":
+        city = st.selectbox("Select city:", ["London", "Manchester", "Birmingham"])
+    elif country == "Canada":
+        city = st.selectbox("Select city:", ["Toronto", "Vancouver", "Montreal"])
     else:
         city = st.text_input("Enter your city:")
-    
+
     if city:
-        st.success(f"Showing opportunities in **{city}, {country}** (future integration here).")
+        st.success(f"Showing opportunities in **{city}, {country}**. (Integration coming soon!)")
